@@ -239,37 +239,44 @@ COLLECTION_MAPPING = {
 # ================================================================
 
 # ================================================================
-#  CARE LABEL LOADER (3 sheets from one Google Sheet)
+#  CARE LABEL LOADER (3 sheets from Google Sheet - WORKING)
 # ================================================================
 @st.cache_data(ttl=600)
 def load_care_label_data_full():
-    """Load all 3 sheets preserving all language columns."""
-    sheet_id = "2PACX-1vQtV5x4B3Sf_CCIMLCfvPtSP8nYru5BMAh5Xe4wWkqcrzZqT2cRJ7JYlvaHrsXql0h9Dnqohvq2mrKM"
+    """Load all 3 sheets from PEPCO Care Label Google Sheet"""
     
-    sheets = {
-        "comp_instructions": "Composition Instructions",
-        "composition": "Composition",
-        "care_instructions": "Care Instructions"
+    # Export ID (পাবলিশ করা লিংক থেকে)
+    EXPORT_ID = "2PACX-1vQtV5x4B3Sf_CCIMLCfvPtSP8nYru5BMAh5Xe4wWkqcrzZqT2cRJ7JYlvaHrsXql0h9Dnqohvq2mrKM"
+    
+    # Sheet configuration with gids
+    sheets_config = {
+        "comp_instructions": {"name": "Composition Instructions", "gid": "0"},
+        "composition": {"name": "Composition", "gid": "1935147264"},
+        "care_instructions": {"name": "Care Instructions", "gid": "21483732"}
     }
     
     result = {}
-    for key, sheet_name in sheets.items():
+    
+    for key, config in sheets_config.items():
         try:
-            encoded = requests.utils.quote(sheet_name)
-            url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={encoded}"
+            # Correct CSV export URL using gid
+            url = f"https://docs.google.com/spreadsheets/d/e/{EXPORT_ID}/export?format=csv&gid={config['gid']}"
+            
+            st.write(f"Loading: {config['name']}")  # Debug - you can remove later
             df = pd.read_csv(url)
+            
             if df.empty:
-                st.warning(f"⚠️ Sheet '{sheet_name}' is empty")
+                st.warning(f"⚠️ Sheet '{config['name']}' is empty")
                 result[key] = pd.DataFrame()
             else:
-                # Keep all columns, first row as header
+                st.success(f"✅ Loaded '{config['name']}' - {len(df)} rows")
                 result[key] = df
+                
         except Exception as e:
-            st.warning(f"Could not load sheet '{sheet_name}': {e}")
+            st.error(f"❌ Failed to load '{config['name']}': {str(e)}")
             result[key] = pd.DataFrame()
     
     return result
-
 
 # ================================================================
 #  PRICE DATA LOADER (Google Sheet)
@@ -1169,83 +1176,82 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 material_compositions[lang] = ", ".join(comp)
 
     # ============================================================
-    #  CARE LABEL UI (NEW - CORRECTLY PLACED)
+    #  CARE LABEL UI
     # ============================================================
     st.markdown("### 🏷️ Care Label")
     
     care_data = load_care_label_data_full()
     
-    # Language selection for Care Label
-    available_langs = ['EN', 'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA']
-    
-    col_lang, col1, col2, col3 = st.columns([1, 2, 2, 2])
-    
-    with col_lang:
-        care_lang = st.selectbox("Care Label Language", options=available_langs, index=1, key="care_lang")
-    
-    # Initialize care label variables
-    final_composition_text = ""
-    care_inst_text = ""
-    
-    with col1:
-        comp_inst_options = []
-        if not care_data["comp_instructions"].empty:
-            comp_inst_options = care_data["comp_instructions"].iloc[:, 0].dropna().tolist()
-        selected_comp_inst = st.selectbox("Composition Instructions", options=[""] + comp_inst_options, key="comp_inst")
+    # Check if data loaded successfully
+    if care_data["comp_instructions"].empty and care_data["composition"].empty and care_data["care_instructions"].empty:
+        st.error("❌ Could not load Care Label data. Please check Google Sheet connection.")
+        final_composition_text = ""
+        care_inst_text = ""
+    else:
+        # Language selection for Care Label
+        available_langs = ['EN', 'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA']
         
-    with col2:
-        comp_options = []
-        if not care_data["composition"].empty:
-            comp_options = care_data["composition"].iloc[:, 0].dropna().tolist()
-        selected_composition = st.selectbox("Composition", options=[""] + comp_options, key="composition")
+        col_lang, col1, col2, col3 = st.columns([1, 2, 2, 2])
         
-    with col3:
-        care_inst_options = []
-        if not care_data["care_instructions"].empty:
-            care_inst_options = care_data["care_instructions"].iloc[:, 0].dropna().tolist()
-        selected_care_inst = st.selectbox("Care Instructions", options=[""] + care_inst_options, key="care_inst")
-    
-    # Get actual text in target language
-    comp_inst_text = ""
-    if selected_comp_inst and not care_data["comp_instructions"].empty:
-        df_care = care_data["comp_instructions"]
-        en_col = df_care.columns[0]
-        row = df_care[df_care[en_col].astype(str).str.strip() == selected_comp_inst]
-        if not row.empty:
-            if care_lang in df_care.columns:
-                comp_inst_text = row.iloc[0][care_lang]
-            else:
-                comp_inst_text = row.iloc[0][en_col]
-    
-    composition_text = ""
-    if selected_composition and not care_data["composition"].empty:
-        df_care = care_data["composition"]
-        en_col = df_care.columns[0]
-        row = df_care[df_care[en_col].astype(str).str.strip() == selected_composition]
-        if not row.empty:
-            if care_lang in df_care.columns:
-                composition_text = row.iloc[0][care_lang]
-            else:
-                composition_text = row.iloc[0][en_col]
-    
-    care_inst_text = ""
-    if selected_care_inst and not care_data["care_instructions"].empty:
-        df_care = care_data["care_instructions"]
-        en_col = df_care.columns[0]
-        row = df_care[df_care[en_col].astype(str).str.strip() == selected_care_inst]
-        if not row.empty:
-            if care_lang in df_care.columns:
-                care_inst_text = row.iloc[0][care_lang]
-            else:
-                care_inst_text = row.iloc[0][en_col]
-    
-    # Combine Composition Instructions + Composition for final "Composition" column in CSV
-    if comp_inst_text:
-        final_composition_text += comp_inst_text
-    if composition_text:
-        if final_composition_text:
-            final_composition_text += " "
-        final_composition_text += composition_text
+        with col_lang:
+            care_lang = st.selectbox("Care Label Language", options=available_langs, index=1, key="care_lang")
+        
+        # Get options from sheets
+        with col1:
+            comp_inst_options = []
+            if not care_data["comp_instructions"].empty:
+                # First column is usually EN
+                en_col = care_data["comp_instructions"].columns[0]
+                comp_inst_options = care_data["comp_instructions"][en_col].dropna().astype(str).tolist()
+            selected_comp_inst = st.selectbox("Composition Instructions", options=[""] + comp_inst_options, key="comp_inst")
+            
+        with col2:
+            comp_options = []
+            if not care_data["composition"].empty:
+                en_col = care_data["composition"].columns[0]
+                comp_options = care_data["composition"][en_col].dropna().astype(str).tolist()
+            selected_composition = st.selectbox("Composition", options=[""] + comp_options, key="composition")
+            
+        with col3:
+            care_inst_options = []
+            if not care_data["care_instructions"].empty:
+                en_col = care_data["care_instructions"].columns[0]
+                care_inst_options = care_data["care_instructions"][en_col].dropna().astype(str).tolist()
+            selected_care_inst = st.selectbox("Care Instructions", options=[""] + care_inst_options, key="care_inst")
+        
+        # Get actual text in target language
+        def get_translation(df, en_text, target_lang):
+            if df.empty or not en_text:
+                return ""
+            en_col = df.columns[0]
+            row = df[df[en_col].astype(str).str.strip() == en_text]
+            if not row.empty:
+                if target_lang in df.columns:
+                    return row.iloc[0][target_lang]
+                else:
+                    return row.iloc[0][en_col]
+            return ""
+        
+        comp_inst_text = get_translation(care_data["comp_instructions"], selected_comp_inst, care_lang)
+        composition_text = get_translation(care_data["composition"], selected_composition, care_lang)
+        care_inst_text = get_translation(care_data["care_instructions"], selected_care_inst, care_lang)
+        
+        # Combine Composition Instructions + Composition
+        final_composition_text = ""
+        if comp_inst_text:
+            final_composition_text += comp_inst_text
+        if composition_text:
+            if final_composition_text:
+                final_composition_text += " "
+            final_composition_text += composition_text
+        
+        # Show preview
+        if final_composition_text or care_inst_text:
+            with st.expander("📋 Preview Care Label Text"):
+                if final_composition_text:
+                    st.write(f"**Composition:** {final_composition_text}")
+                if care_inst_text:
+                    st.write(f"**Care Instructions:** {care_inst_text}")
 
     # ============================================================
     #  DataFrame enrichment (Dept, Cotton, Collection, Product, Washing)
