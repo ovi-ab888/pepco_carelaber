@@ -1176,31 +1176,36 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 material_compositions[lang] = ", ".join(comp)
 
     # ============================================================
-    #  CARE LABEL UI
+    #  CARE LABEL UI (With Dynamic Language Selection)
     # ============================================================
     st.markdown("### 🏷️ Care Label")
     
     care_data = load_care_label_data_full()
     
-    # Check if data loaded successfully
-    if care_data["comp_instructions"].empty and care_data["composition"].empty and care_data["care_instructions"].empty:
-        st.error("❌ Could not load Care Label data. Please check Google Sheet connection.")
-        final_composition_text = ""
-        care_inst_text = ""
-    else:
-        # Language selection for Care Label
-        available_langs = ['EN', 'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA']
+    # Initialize
+    final_composition_text = ""
+    care_inst_text = ""
+    
+    if not (care_data["comp_instructions"].empty and care_data["composition"].empty and care_data["care_instructions"].empty):
+        
+        # Detect available languages from first sheet's columns
+        df_sample = care_data["comp_instructions"]
+        if not df_sample.empty:
+            # Skip first column (EN) - rest are language columns
+            available_langs = df_sample.columns[1:].tolist()
+        else:
+            available_langs = ['EN']  # Fallback
         
         col_lang, col1, col2, col3 = st.columns([1, 2, 2, 2])
         
         with col_lang:
-            care_lang = st.selectbox("Care Label Language", options=available_langs, index=1, key="care_lang")
+            # Default to first language if available
+            default_idx = 0 if available_langs else 0
+            care_lang = st.selectbox("Language", options=available_langs, index=default_idx, key="care_lang")
         
-        # Get options from sheets
         with col1:
             comp_inst_options = []
             if not care_data["comp_instructions"].empty:
-                # First column is usually EN
                 en_col = care_data["comp_instructions"].columns[0]
                 comp_inst_options = care_data["comp_instructions"][en_col].dropna().astype(str).tolist()
             selected_comp_inst = st.selectbox("Composition Instructions", options=[""] + comp_inst_options, key="comp_inst")
@@ -1219,70 +1224,38 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 care_inst_options = care_data["care_instructions"][en_col].dropna().astype(str).tolist()
             selected_care_inst = st.selectbox("Care Instructions", options=[""] + care_inst_options, key="care_inst")
         
-        # Get actual text in target language
-        def get_translation(df, en_text, target_lang):
+        def get_translation(df, en_text, lang):
             if df.empty or not en_text:
                 return ""
             en_col = df.columns[0]
             row = df[df[en_col].astype(str).str.strip() == en_text]
             if not row.empty:
-                if target_lang in df.columns:
-                    return row.iloc[0][target_lang]
-                else:
-                    return row.iloc[0][en_col]
+                if lang in df.columns:
+                    return row.iloc[0][lang]
+                return row.iloc[0][en_col]
             return ""
         
         comp_inst_text = get_translation(care_data["comp_instructions"], selected_comp_inst, care_lang)
         composition_text = get_translation(care_data["composition"], selected_composition, care_lang)
         care_inst_text = get_translation(care_data["care_instructions"], selected_care_inst, care_lang)
         
-        # Combine Composition Instructions + Composition
-        final_composition_text = ""
+        # Combine
         if comp_inst_text:
-            final_composition_text += comp_inst_text
+            final_composition_text = comp_inst_text
         if composition_text:
             if final_composition_text:
                 final_composition_text += " "
             final_composition_text += composition_text
         
-        # Show preview
+        # Preview
         if final_composition_text or care_inst_text:
-            with st.expander("📋 Preview Care Label Text"):
+            with st.expander("📋 Preview"):
                 if final_composition_text:
                     st.write(f"**Composition:** {final_composition_text}")
                 if care_inst_text:
                     st.write(f"**Care Instructions:** {care_inst_text}")
-
-    # ============================================================
-    #  DataFrame enrichment (Dept, Cotton, Collection, Product, Washing)
-    # ============================================================
-    df['Dept'] = df['Item_classification'].apply(get_dept_value)
-
-    if cotton_value == "Y":
-        df['Cotton'] = cotton_value
     else:
-        if 'Cotton' in df.columns:
-            df = df.drop(columns=['Cotton'])
-
-    df['Collection'] = df.apply(
-        lambda r: modify_collection(r['Collection'], r['Item_classification']),
-        axis=1
-    )
-
-    product_row = filtered[filtered['PRODUCT_NAME'] == product_type]
-    if not product_row.empty:
-        df['product_name'] = format_product_translations(
-            product_type,
-            product_row.iloc[0],
-            selected_materials,
-            material_trans_dict,
-            material_compositions
-        )
-    else:
-        df['product_name'] = ""
-
-    df['washing_code'] = WASHING_CODES[washing_code_key]
-
+        st.warning("⚠️ Care Label data not available from Google Sheet")
     # ============================================================
     #  PRICE LADDER + CSV EXPORT
     # ============================================================
