@@ -240,6 +240,38 @@ COLLECTION_MAPPING = {
 # ================================================================
 
 # ================================================================
+#  CARE LABEL LOADER (3 sheets from one Google Sheet)
+# ================================================================
+@st.cache_data(ttl=600)
+def load_care_label_data_full():
+    """Load all 3 sheets preserving all language columns."""
+    sheet_id = "2PACX-1vQtV5x4B3Sf_CCIMLCfvPtSP8nYru5BMAh5Xe4wWkqcrzZqT2cRJ7JYlvaHrsXql0h9Dnqohvq2mrKM"
+    
+    sheets = {
+        "comp_instructions": "Composition Instructions",
+        "composition": "Composition",
+        "care_instructions": "Care Instructions"
+    }
+    
+    result = {}
+    for key, sheet_name in sheets.items():
+        try:
+            encoded = requests.utils.quote(sheet_name)
+            url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={encoded}"
+            df = pd.read_csv(url)
+            if df.empty:
+                st.warning(f"⚠️ Sheet '{sheet_name}' is empty")
+                result[key] = pd.DataFrame()
+            else:
+                # Keep all columns, first row as header
+                result[key] = df
+        except Exception as e:
+            st.warning(f"Could not load sheet '{sheet_name}': {e}")
+            result[key] = pd.DataFrame()
+    
+    return result
+
+# ================================================================
 #  PRICE DATA LOADER (Google Sheet)
 # ================================================================
 @st.cache_data(ttl=600)
@@ -352,6 +384,103 @@ def load_material_translations():
             {'material': 'Cotton', 'language': 'MK', 'translation': 'Cotton'}
         ]
         return pd.DataFrame(fallback)
+
+    # ============================================================
+    #  CARE LABEL UI (NEW)
+    # ============================================================
+    st.markdown("### 🏷️ Care Label")
+    
+    care_data = load_care_label_data_full()
+    
+    # Language selection for Care Label
+    # Available languages from your screenshot: EN, AL, BG, BiH, CZ, DE, etc.
+    available_langs = ['EN', 'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA']
+    
+    col_lang, col1, col2, col3 = st.columns([1, 2, 2, 2])
+    
+    with col_lang:
+        care_lang = st.selectbox("Care Label Language", options=available_langs, index=1, key="care_lang")  # index 1 = AL
+    
+    # Helper to get text from df based on language code
+    def get_care_text(df, lang_code):
+        if df.empty:
+            return ""
+        # Find column that matches lang_code (case-insensitive)
+        for col in df.columns:
+            if col.strip().upper() == lang_code.upper():
+                # Return all rows joined by space
+                texts = df[col].dropna().astype(str).tolist()
+                return " ".join(texts) if texts else ""
+        # Fallback to first column (EN)
+        first_col = df.columns[0]
+        texts = df[first_col].dropna().astype(str).tolist()
+        return " ".join(texts) if texts else ""
+    
+    # Display each section with selectbox for specific instruction (if multiple rows)
+    # For simplicity, we'll show dropdowns for each category
+    
+    with col1:
+        comp_inst_options = []
+        if not care_data["comp_instructions"].empty:
+            # Show EN column as label, store target lang text
+            comp_inst_options = care_data["comp_instructions"].iloc[:, 0].dropna().tolist()
+        selected_comp_inst = st.selectbox("Composition Instructions", options=[""] + comp_inst_options, key="comp_inst")
+        
+    with col2:
+        comp_options = []
+        if not care_data["composition"].empty:
+            comp_options = care_data["composition"].iloc[:, 0].dropna().tolist()
+        selected_composition = st.selectbox("Composition", options=[""] + comp_options, key="composition")
+        
+    with col3:
+        care_inst_options = []
+        if not care_data["care_instructions"].empty:
+            care_inst_options = care_data["care_instructions"].iloc[:, 0].dropna().tolist()
+        selected_care_inst = st.selectbox("Care Instructions", options=[""] + care_inst_options, key="care_inst")
+    
+    # Get actual text in target language
+    comp_inst_text = ""
+    if selected_comp_inst and not care_data["comp_instructions"].empty:
+        # Find row where EN column matches selected_comp_inst
+        df = care_data["comp_instructions"]
+        en_col = df.columns[0]
+        row = df[df[en_col].astype(str).str.strip() == selected_comp_inst]
+        if not row.empty:
+            if care_lang in df.columns:
+                comp_inst_text = row.iloc[0][care_lang]
+            else:
+                comp_inst_text = row.iloc[0][en_col]  # fallback EN
+    
+    composition_text = ""
+    if selected_composition and not care_data["composition"].empty:
+        df = care_data["composition"]
+        en_col = df.columns[0]
+        row = df[df[en_col].astype(str).str.strip() == selected_composition]
+        if not row.empty:
+            if care_lang in df.columns:
+                composition_text = row.iloc[0][care_lang]
+            else:
+                composition_text = row.iloc[0][en_col]
+    
+    care_inst_text = ""
+    if selected_care_inst and not care_data["care_instructions"].empty:
+        df = care_data["care_instructions"]
+        en_col = df.columns[0]
+        row = df[df[en_col].astype(str).str.strip() == selected_care_inst]
+        if not row.empty:
+            if care_lang in df.columns:
+                care_inst_text = row.iloc[0][care_lang]
+            else:
+                care_inst_text = row.iloc[0][en_col]
+    
+    # Combine Composition Instructions + Composition for final "Composition" column in CSV
+    final_composition_text = ""
+    if comp_inst_text:
+        final_composition_text += comp_inst_text
+    if composition_text:
+        if final_composition_text:
+            final_composition_text += " "
+        final_composition_text += composition_text
 
 
 # ================================================================
@@ -1190,7 +1319,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 "Collection", "Colour_SKU", "Style_Merch_Season",
                 "Batch", "barcode", "washing_code", "EUR", "BGN",
                 "BAM", "PLN", "RON", "CZK", "UAH", "MKD", "RSD", "HUF",
-                "product_name", "Dept", "Item_name_English", "Season"
+                "product_name", "Dept", "Item_name_English", "Season", "Composition", "Care Instructions" 
             ]
 
             # Optionally include Cotton column
@@ -1244,6 +1373,39 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             )
         else:
             st.warning("⚠️ Processing stopped - valid PLN price not found")
+
+
+def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
+    # ... apnar existing code up to material composition ...
+    
+    # ============================================================
+    #  CARE LABEL SECTION (NEW)
+    # ============================================================
+    st.markdown("### 🏷️ Care Label")
+    
+    care_data = load_care_label_data()
+    
+    # Language selection based on target languages (you can make this dynamic)
+    # For now, we use 'AL' (Albanian) as demo - but you can let user choose
+    target_lang = "AL"  # You can change to a selectbox if needed
+    
+    # Helper to get dropdown options from a sheet
+    def get_care_options(sheet_df, lang_code="AL"):
+        """sheet_df has columns: en, text. We need to filter by language? 
+           Actually the sheet has EN in col A and text in col B (which is language specific)
+           Since your sheet is already per language in different columns, we need to adapt.
+           
+           BUT from your screenshot, the sheet structure is:
+           Col A = EN phrase, Col B = AL, Col C = BG, etc.
+           
+           So we need to load full sheet and pick column by language.
+        """
+        # Better approach: reload sheet without forcing to 2 columns
+        # Let's modify load_care_label_data to keep original columns
+        pass
+    
+    # SIMPLER APPROACH: Since you have fixed languages, let's load each language as separate sheet? No.
+    # ACTUAL FIX: Reload sheets preserving all columns, then allow language selection.
 
 
 # ================================================================
