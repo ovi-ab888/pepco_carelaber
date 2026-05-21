@@ -243,39 +243,23 @@ COLLECTION_MAPPING = {
 # ================================================================
 @st.cache_data(ttl=600)
 def load_care_label_data_full():
-    """Load all 3 sheets from PEPCO Care Label Google Sheet"""
-    
-    # Export ID (পাবলিশ করা লিংক থেকে)
-    EXPORT_ID = "2PACX-1vQtV5x4B3Sf_CCIMLCfvPtSP8nYru5BMAh5Xe4wWkqcrzZqT2cRJ7JYlvaHrsXql0h9Dnqohvq2mrKM"
-    
-    # Sheet configuration with gids
-    sheets_config = {
-        "comp_instructions": {"name": "Composition Instructions", "gid": "0"},
-        "composition": {"name": "Composition", "gid": "1935147264"},
-        "care_instructions": {"name": "Care Instructions", "gid": "21483732"}
+    base_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQtV5x4B3Sf_CCIMLCfvPtSP8nYru5BMAh5Xe4wWkqcrzZqT2cRJ7JYlvaHrsXql0h9Dnqohvq2mrKM/pub"
+    sheets = {
+        "comp_instructions": f"{base_url}?gid=0&single=true&output=csv",
+        "composition": f"{base_url}?gid=1935147264&single=true&output=csv",
+        "care_instructions": f"{base_url}?gid=21483732&single=true&output=csv"
     }
-    
     result = {}
-    
-    for key, config in sheets_config.items():
+    for key, url in sheets.items():
         try:
-            # Correct CSV export URL using gid
-            url = f"https://docs.google.com/spreadsheets/d/e/{EXPORT_ID}/export?format=csv&gid={config['gid']}"
-            
-            st.write(f"Loading: {config['name']}")  # Debug - you can remove later
             df = pd.read_csv(url)
-            
-            if df.empty:
-                st.warning(f"⚠️ Sheet '{config['name']}' is empty")
-                result[key] = pd.DataFrame()
-            else:
-                st.success(f"✅ Loaded '{config['name']}' - {len(df)} rows")
+            if not df.empty:
                 result[key] = df
-                
+            else:
+                result[key] = pd.DataFrame()
         except Exception as e:
-            st.error(f"❌ Failed to load '{config['name']}': {str(e)}")
+            st.warning(f"Could not load {key}: {e}")
             result[key] = pd.DataFrame()
-    
     return result
 
 # ================================================================
