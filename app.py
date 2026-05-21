@@ -234,7 +234,6 @@ COLLECTION_MAPPING = {
 }
 
 
-
 # ================================================================
 # PART 2 — DATA LOADERS + HELPER FUNCTIONS
 # ================================================================
@@ -270,6 +269,7 @@ def load_care_label_data_full():
             result[key] = pd.DataFrame()
     
     return result
+
 
 # ================================================================
 #  PRICE DATA LOADER (Google Sheet)
@@ -384,103 +384,6 @@ def load_material_translations():
             {'material': 'Cotton', 'language': 'MK', 'translation': 'Cotton'}
         ]
         return pd.DataFrame(fallback)
-
-    # ============================================================
-    #  CARE LABEL UI (NEW)
-    # ============================================================
-    st.markdown("### 🏷️ Care Label")
-    
-    care_data = load_care_label_data_full()
-    
-    # Language selection for Care Label
-    # Available languages from your screenshot: EN, AL, BG, BiH, CZ, DE, etc.
-    available_langs = ['EN', 'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA']
-    
-    col_lang, col1, col2, col3 = st.columns([1, 2, 2, 2])
-    
-    with col_lang:
-        care_lang = st.selectbox("Care Label Language", options=available_langs, index=1, key="care_lang")  # index 1 = AL
-    
-    # Helper to get text from df based on language code
-    def get_care_text(df, lang_code):
-        if df.empty:
-            return ""
-        # Find column that matches lang_code (case-insensitive)
-        for col in df.columns:
-            if col.strip().upper() == lang_code.upper():
-                # Return all rows joined by space
-                texts = df[col].dropna().astype(str).tolist()
-                return " ".join(texts) if texts else ""
-        # Fallback to first column (EN)
-        first_col = df.columns[0]
-        texts = df[first_col].dropna().astype(str).tolist()
-        return " ".join(texts) if texts else ""
-    
-    # Display each section with selectbox for specific instruction (if multiple rows)
-    # For simplicity, we'll show dropdowns for each category
-    
-    with col1:
-        comp_inst_options = []
-        if not care_data["comp_instructions"].empty:
-            # Show EN column as label, store target lang text
-            comp_inst_options = care_data["comp_instructions"].iloc[:, 0].dropna().tolist()
-        selected_comp_inst = st.selectbox("Composition Instructions", options=[""] + comp_inst_options, key="comp_inst")
-        
-    with col2:
-        comp_options = []
-        if not care_data["composition"].empty:
-            comp_options = care_data["composition"].iloc[:, 0].dropna().tolist()
-        selected_composition = st.selectbox("Composition", options=[""] + comp_options, key="composition")
-        
-    with col3:
-        care_inst_options = []
-        if not care_data["care_instructions"].empty:
-            care_inst_options = care_data["care_instructions"].iloc[:, 0].dropna().tolist()
-        selected_care_inst = st.selectbox("Care Instructions", options=[""] + care_inst_options, key="care_inst")
-    
-    # Get actual text in target language
-    comp_inst_text = ""
-    if selected_comp_inst and not care_data["comp_instructions"].empty:
-        # Find row where EN column matches selected_comp_inst
-        df = care_data["comp_instructions"]
-        en_col = df.columns[0]
-        row = df[df[en_col].astype(str).str.strip() == selected_comp_inst]
-        if not row.empty:
-            if care_lang in df.columns:
-                comp_inst_text = row.iloc[0][care_lang]
-            else:
-                comp_inst_text = row.iloc[0][en_col]  # fallback EN
-    
-    composition_text = ""
-    if selected_composition and not care_data["composition"].empty:
-        df = care_data["composition"]
-        en_col = df.columns[0]
-        row = df[df[en_col].astype(str).str.strip() == selected_composition]
-        if not row.empty:
-            if care_lang in df.columns:
-                composition_text = row.iloc[0][care_lang]
-            else:
-                composition_text = row.iloc[0][en_col]
-    
-    care_inst_text = ""
-    if selected_care_inst and not care_data["care_instructions"].empty:
-        df = care_data["care_instructions"]
-        en_col = df.columns[0]
-        row = df[df[en_col].astype(str).str.strip() == selected_care_inst]
-        if not row.empty:
-            if care_lang in df.columns:
-                care_inst_text = row.iloc[0][care_lang]
-            else:
-                care_inst_text = row.iloc[0][en_col]
-    
-    # Combine Composition Instructions + Composition for final "Composition" column in CSV
-    final_composition_text = ""
-    if comp_inst_text:
-        final_composition_text += comp_inst_text
-    if composition_text:
-        if final_composition_text:
-            final_composition_text += " "
-        final_composition_text += composition_text
 
 
 # ================================================================
@@ -681,7 +584,6 @@ def clean_item_name_english(name: str) -> str:
 
     # সবশেষে CAPITAL
     return text.upper()
-
 
 
 # ================================================================
@@ -1205,13 +1107,12 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     ]
     running_total = sum(r["pct"] for r in valid_rows)
 
-    # Auto-add next material row
+    # Auto-add next material row - FIXED (removed st.rerun)
     if running_total < 100 and st.session_state.mat_rows < 5:
         last = st.session_state.mat_data[st.session_state.mat_rows - 1]
         if last["mat"] not in (None, "—") and last["pct"] > 0:
             st.session_state.mat_rows += 1
             _ensure_row(st.session_state.mat_rows - 1)
-            st.rerun()
 
     # If total >= 100 → trim extra rows visually
     if running_total >= 100 and st.session_state.mat_rows > len(valid_rows):
@@ -1268,6 +1169,85 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 material_compositions[lang] = ", ".join(comp)
 
     # ============================================================
+    #  CARE LABEL UI (NEW - CORRECTLY PLACED)
+    # ============================================================
+    st.markdown("### 🏷️ Care Label")
+    
+    care_data = load_care_label_data_full()
+    
+    # Language selection for Care Label
+    available_langs = ['EN', 'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA']
+    
+    col_lang, col1, col2, col3 = st.columns([1, 2, 2, 2])
+    
+    with col_lang:
+        care_lang = st.selectbox("Care Label Language", options=available_langs, index=1, key="care_lang")
+    
+    # Initialize care label variables
+    final_composition_text = ""
+    care_inst_text = ""
+    
+    with col1:
+        comp_inst_options = []
+        if not care_data["comp_instructions"].empty:
+            comp_inst_options = care_data["comp_instructions"].iloc[:, 0].dropna().tolist()
+        selected_comp_inst = st.selectbox("Composition Instructions", options=[""] + comp_inst_options, key="comp_inst")
+        
+    with col2:
+        comp_options = []
+        if not care_data["composition"].empty:
+            comp_options = care_data["composition"].iloc[:, 0].dropna().tolist()
+        selected_composition = st.selectbox("Composition", options=[""] + comp_options, key="composition")
+        
+    with col3:
+        care_inst_options = []
+        if not care_data["care_instructions"].empty:
+            care_inst_options = care_data["care_instructions"].iloc[:, 0].dropna().tolist()
+        selected_care_inst = st.selectbox("Care Instructions", options=[""] + care_inst_options, key="care_inst")
+    
+    # Get actual text in target language
+    comp_inst_text = ""
+    if selected_comp_inst and not care_data["comp_instructions"].empty:
+        df_care = care_data["comp_instructions"]
+        en_col = df_care.columns[0]
+        row = df_care[df_care[en_col].astype(str).str.strip() == selected_comp_inst]
+        if not row.empty:
+            if care_lang in df_care.columns:
+                comp_inst_text = row.iloc[0][care_lang]
+            else:
+                comp_inst_text = row.iloc[0][en_col]
+    
+    composition_text = ""
+    if selected_composition and not care_data["composition"].empty:
+        df_care = care_data["composition"]
+        en_col = df_care.columns[0]
+        row = df_care[df_care[en_col].astype(str).str.strip() == selected_composition]
+        if not row.empty:
+            if care_lang in df_care.columns:
+                composition_text = row.iloc[0][care_lang]
+            else:
+                composition_text = row.iloc[0][en_col]
+    
+    care_inst_text = ""
+    if selected_care_inst and not care_data["care_instructions"].empty:
+        df_care = care_data["care_instructions"]
+        en_col = df_care.columns[0]
+        row = df_care[df_care[en_col].astype(str).str.strip() == selected_care_inst]
+        if not row.empty:
+            if care_lang in df_care.columns:
+                care_inst_text = row.iloc[0][care_lang]
+            else:
+                care_inst_text = row.iloc[0][en_col]
+    
+    # Combine Composition Instructions + Composition for final "Composition" column in CSV
+    if comp_inst_text:
+        final_composition_text += comp_inst_text
+    if composition_text:
+        if final_composition_text:
+            final_composition_text += " "
+        final_composition_text += composition_text
+
+    # ============================================================
     #  DataFrame enrichment (Dept, Cotton, Collection, Product, Washing)
     # ============================================================
     df['Dept'] = df['Item_classification'].apply(get_dept_value)
@@ -1298,7 +1278,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     df['washing_code'] = WASHING_CODES[washing_code_key]
 
     # ============================================================
-       #  PRICE LADDER + CSV EXPORT
+    #  PRICE LADDER + CSV EXPORT
     # ============================================================
     if pln_price is not None:
         currency_values = find_closest_price(pln_price)
@@ -1312,6 +1292,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
             # NEW COLUMN → Item name English (cleaned & CAPITAL)
             df["Item_name_English"] = df["Item_name_EN"].apply(clean_item_name_english)
+            
+            # NEW: Add Care Label columns to dataframe
+            df['Composition'] = final_composition_text
+            df['Care Instructions'] = care_inst_text
 
             final_cols = [
                 "Order_ID", "Style", "Colour", "Supplier_product_code",
@@ -1319,7 +1303,8 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 "Collection", "Colour_SKU", "Style_Merch_Season",
                 "Batch", "barcode", "washing_code", "EUR", "BGN",
                 "BAM", "PLN", "RON", "CZK", "UAH", "MKD", "RSD", "HUF",
-                "product_name", "Dept", "Item_name_English", "Season", "Composition", "Care Instructions" 
+                "product_name", "Dept", "Item_name_English", "Season",
+                "Composition", "Care Instructions"
             ]
 
             # Optionally include Cotton column
@@ -1375,39 +1360,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.warning("⚠️ Processing stopped - valid PLN price not found")
 
 
-def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
-    # ... apnar existing code up to material composition ...
-    
-    # ============================================================
-    #  CARE LABEL SECTION (NEW)
-    # ============================================================
-    st.markdown("### 🏷️ Care Label")
-    
-    care_data = load_care_label_data()
-    
-    # Language selection based on target languages (you can make this dynamic)
-    # For now, we use 'AL' (Albanian) as demo - but you can let user choose
-    target_lang = "AL"  # You can change to a selectbox if needed
-    
-    # Helper to get dropdown options from a sheet
-    def get_care_options(sheet_df, lang_code="AL"):
-        """sheet_df has columns: en, text. We need to filter by language? 
-           Actually the sheet has EN in col A and text in col B (which is language specific)
-           Since your sheet is already per language in different columns, we need to adapt.
-           
-           BUT from your screenshot, the sheet structure is:
-           Col A = EN phrase, Col B = AL, Col C = BG, etc.
-           
-           So we need to load full sheet and pick column by language.
-        """
-        # Better approach: reload sheet without forcing to 2 columns
-        # Let's modify load_care_label_data to keep original columns
-        pass
-    
-    # SIMPLER APPROACH: Since you have fixed languages, let's load each language as separate sheet? No.
-    # ACTUAL FIX: Reload sheets preserving all columns, then allow language selection.
-
-
 # ================================================================
 #  PEPCO SECTION (Uploader + Reset)
 # ================================================================
@@ -1428,13 +1380,12 @@ def pepco_section():
             for k in list(st.session_state.keys()):
                 if k.startswith((
                     "ui_", "mat_", "pepco_",
-                    "colour_", "colour_manual_", "colour_missing_"
+                    "colour_", "colour_manual_", "colour_missing_", "comp_inst", "composition", "care_inst", "care_lang"
                 )):
                     st.session_state.pop(k, None)
 
             # Force uploader refresh
             st.session_state.uploader_key += 1
-            # ❌ st.rerun() REMOVED (callback auto reruns)
 
         st.button("🆕 Upload New File", on_click=_reset_all)
 
@@ -1472,7 +1423,6 @@ def pepco_section():
 
         concatenated_ids = "+".join(other_ids) if other_ids else ""
         process_pepco_pdf(primary_pdf, extra_order_ids=concatenated_ids)
-
 
 
 # ================================================================
@@ -1520,30 +1470,3 @@ def main():
 # ================================================================
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
