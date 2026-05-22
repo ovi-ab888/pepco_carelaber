@@ -944,10 +944,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             component_options = ["Main fabric", "Lining", "Pocket bag", "Trim", "Hood", "Collar", "Cuff"]
         
         if "components" not in st.session_state:
-            st.session_state.components = [{"id": 1, "component_name": "Main fabric", "comp_inst": "", "materials": [{"mat": "Cotton", "pct": 100}]}]
+            st.session_state.components = []
         if "next_component_id" not in st.session_state:
-            st.session_state.next_component_id = 2
-        
+            st.session_state.next_component_id = 1
+         
         for idx, comp in enumerate(st.session_state.components):
             comp_id = comp.get("id", idx)
             st.divider()
