@@ -898,31 +898,16 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         
         # Build components_data ONLY if valid materials exist and total is 100%
         if valid_materials and simple_total == 100:
-            components_data = [{
-                "name": "Main fabric",
-                "materials": valid_materials.copy()
-            }]
+            # Simple Mode: No component name, only materials
+            materials_parts = []
+            for mat in valid_materials:
+                if mat["mat"] not in (None, "", "—") and mat["pct"] > 0:
+                    mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
+                    materials_parts.append(mat_text)
+                    if mat["mat"] not in selected_materials:
+                        selected_materials.append(mat["mat"])
             
-            # Build composition text
-            composition_parts = []
-            for comp in components_data:
-                comp_name = comp.get("name", "")
-                materials = comp.get("materials", [])
-                
-                comp_name_translated = get_component_name_translations(comp_name, comp_translations_df)
-                
-                materials_parts = []
-                for mat in materials:
-                    if mat["mat"] not in (None, "", "—") and mat["pct"] > 0:
-                        mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
-                        materials_parts.append(mat_text)
-                        if mat["mat"] not in selected_materials:
-                            selected_materials.append(mat["mat"])
-                
-                materials_text = ", ".join(materials_parts)
-                composition_parts.append(f"{comp_name_translated}: {materials_text}")
-            
-            final_composition_text = " | ".join(composition_parts)
+            final_composition_text = ", ".join(materials_parts)
             
             # Add instructions if present
             if simple_comp_inst:
@@ -937,13 +922,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 with st.expander("📋 Preview Composition (All Languages)"):
                     st.write(final_composition_text)
         else:
-            # No valid composition yet - ensure nothing is shown in CSV
+            # No valid composition yet
             final_composition_text = ""
             selected_materials = []
             cotton_value = ""
-            components_data = []
-            if st.session_state.simple_materials and simple_total != 100 and simple_total > 0:
-                st.warning("⚠️ Please ensure total percentage is 100% before proceeding")
     
     else:
         # ========================================================
