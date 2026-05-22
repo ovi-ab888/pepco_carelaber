@@ -1112,61 +1112,44 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     material_trans_dict = {}
     material_compositions = {}
     
-    if selected_materials and not material_translations_df.empty:
+    # Collect all materials with their percentages from UI
+    materials_with_pct = {}
+    
+    if not use_advanced_mode:
+        # Simple Mode - get from simple_materials
+        if 'simple_materials' in st.session_state:
+            for mat in st.session_state.simple_materials:
+                if mat.get("mat") and mat.get("mat") not in (None, "", "—") and mat.get("pct", 0) > 0:
+                    materials_with_pct[mat["mat"]] = mat["pct"]
+    else:
+        # Advanced Mode - get from components
+        if 'components' in st.session_state:
+            for comp in st.session_state.components:
+                for mat in comp.get("materials", []):
+                    if mat.get("mat") and mat.get("mat") not in (None, "", "—") and mat.get("pct", 0) > 0:
+                        materials_with_pct[mat["mat"]] = mat["pct"]
+    
+    # Now build translations
+    if materials_with_pct and not material_translations_df.empty:
         for lang in ['AL', 'MK']:
             names = []
             comp_parts = []
             
-            for mat_name in selected_materials:
+            for mat_name, pct in materials_with_pct.items():
                 t = material_translations_df[(material_translations_df['material'] == mat_name) & (material_translations_df['language'] == lang)]
                 if not t.empty:
                     tr = t['translation'].iloc[0]
                     names.append(tr)
-                    
-                    # Find percentage for this material from components_data
-                    percentage = 0
-                    if components_data:
-                        for component in components_data:
-                            for mat in component.get("materials", []):
-                                if mat.get("mat") == mat_name:
-                                    percentage = mat.get('pct', 0)
-                                    break
-                            if percentage > 0:
-                                break
-                    
-                    # If percentage found, add it; otherwise just add material name
-                    if percentage > 0:
-                        comp_parts.append(f"{percentage}% {tr}")
-                    else:
-                        # Fallback: try to find from simple_materials or components
-                        found = False
-                        if not use_advanced_mode and 'simple_materials' in st.session_state:
-                            for mat in st.session_state.simple_materials:
-                                if mat.get("mat") == mat_name:
-                                    comp_parts.append(f"{mat.get('pct', 0)}% {tr}")
-                                    found = True
-                                    break
-                        if not found and use_advanced_mode and 'components' in st.session_state:
-                            for comp in st.session_state.components:
-                                for mat in comp.get("materials", []):
-                                    if mat.get("mat") == mat_name:
-                                        comp_parts.append(f"{mat.get('pct', 0)}% {tr}")
-                                        found = True
-                                        break
-                                if found:
-                                    break
-                        if not found:
-                            comp_parts.append(f"100% {tr}")
+                    comp_parts.append(f"{pct}% {tr}")
             
             if names:
                 material_trans_dict[lang] = ", ".join(names)
             if comp_parts:
                 material_compositions[lang] = ", ".join(comp_parts)
     
-    # For debugging (can remove later)
+    # For debugging (remove after testing)
     if material_compositions:
-        st.write(f"Debug - material_compositions: {material_compositions}")
-
+        st.success(f"✅ AL/MK Translation ready: {list(material_compositions.keys())}")
     # ============================================================
     # DataFrame enrichment
     # ============================================================
