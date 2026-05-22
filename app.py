@@ -171,7 +171,7 @@ def load_care_composition_data():
         "comp_instructions": {"url": f"{BASE_URL}?gid=0&single=true&output=csv", "name": "Composition Instructions"},
         "materials": {"url": f"{BASE_URL}?gid=1935147264&single=true&output=csv", "name": "Materials"},
         "care_instructions": {"url": f"{BASE_URL}?gid=21483732&single=true&output=csv", "name": "Care Instructions"},
-        "component_names": {"url": f"{BASE_URL}?gid=0&single=true&output=csv", "name": "Component Names"}  # Component Names একই gid=0 এ আছে
+        "component_names": {"url": f"{BASE_URL}?gid=0&single=true&output=csv", "name": "Component Names"}
     }
     
     result = {}
@@ -199,11 +199,10 @@ def load_component_translations():
     if not care_data["component_names"].empty:
         return care_data["component_names"]
     else:
-        # Fallback data from your screenshot
         return pd.DataFrame({
-            "EN": ["Outer fabric", "Side insert", "Sequins", "Woven part", "Side part", "Bottom part", "Upper part", "Cap visor", "Frill", "Fringe", "Fur", "Turtleneck", "Adjustable elastic", "Hood", "Yoke", "Front yoke", "Back yoke", "Pocket", "Side pocket", "Front pocket", "Back pocket", "Interlining", "Gusset", "Bow", "Collar", "Tie", "Cuff", "Fabric", "Inner fabric"],
-            "AL": ["Pëlhurë e sipërme", "Insert anësor", "Temina", "Pjesë pëlhure", "Pjesë anësore", "Pjesë e poshtme", "Pjesë e sipërme", "Çatizë", "Pala", "Xhufka", "gëzof", "Golf", "Plastik regullimi", "Kapuç", "Qafë", "Qafë e përparme", "Qafë e pasme", "Xhep", "Xhep anësor", "Xhep i përparmë", "Xhep i pasmë", "kompensatë", "gusset", "Fjongo", "Jakë", "Kravatë", "manshetë", "Material", "Material i brendshëm"],
-            "BG": ["Външна материя", "Странична подпълнка", "Пайети", "Платнена част", "Странична част", "долна част", "Горна част", "Козирка", "Рош", "Ресни", "Кожа", "Голф", "Ластик за регулиране", "Качулка", "Горна част", "Предна горна част", "Задна горна част", "Джоб", "Страничен джоб", "Преден джоб", "Заден джоб", "Флизелин", "Клин", "Панделка", "Яка", "Вратовързка", "Маншет", "Материал", "Вътрешен материал"]
+            "EN": ["Main fabric", "Lining", "Pocket bag", "Trim", "Hood", "Collar", "Cuff"],
+            "AL": ["Pëlhurë kryesore", "Llastik", "Thes me xhepa", "Shkurtim", "Kapuç", "Jakë", "Manshetë"],
+            "BG": ["Основен плат", "Подплата", "Вътрешен джоб", "Подстригване", "Качулка", "Яка", "Маншет"]
         })
 
 
@@ -589,8 +588,9 @@ def extract_data_from_pdf(file):
 
 
 # ================================================================
-#  TRANSLATION FORMATTER
+#  TRANSLATION FORMATTER FUNCTIONS
 # ================================================================
+
 def get_component_name_translations(comp_name, comp_translations_df):
     """Get component name in all available languages"""
     if comp_translations_df.empty:
@@ -648,51 +648,21 @@ def get_instruction_all_languages(inst_text, comp_instructions_df):
     return " / ".join(translations)
 
 
-def format_product_translations(product_name, translation_row, components_data, comp_translations_df):
-    """
-    Builds multilingual product description with component information.
-    components_data = [{"name": "Main fabric", "materials": [{"mat": "Cotton", "pct": 90}]}]
-    """
+def format_product_translations(product_name, translation_row, components_data, comp_translations_df, material_compositions=None):
+    """Builds multilingual product description with component information."""
     language_order = ['AL', 'MK']
     
     result = {}
     for lang in language_order:
         base_text = translation_row.get(lang, product_name)
         
-        component_parts = []
-        for comp in components_data:
-            comp_name = comp.get("name", "")
-            materials = comp.get("materials", [])
-            
-            # Get translated component name
-            comp_name_translated = comp_name
-            if not comp_translations_df.empty:
-                row = comp_translations_df[comp_translations_df['EN'].astype(str).str.strip() == comp_name]
-                if not row.empty:
-                    comp_name_translated = row.iloc[0].get(lang, comp_name)
-            
-            # Build materials text for this language
-            materials_parts = []
-            for mat in materials:
-                mat_name = mat.get("mat", "")
-                pct = mat.get("pct", 0)
-                if mat_name and pct > 0:
-                    # Get material translation for this language
-                    mat_translated = mat_name
-                    if not comp_translations_df.empty:
-                        # We need materials translation sheet for this
-                        pass
-                    materials_parts.append(f"{pct}% {mat_name}")
-            
-            materials_text = ", ".join(materials_parts)
-            component_parts.append(f"{comp_name_translated} {materials_text}")
+        # Add composition for AL and MK
+        if material_compositions and lang in material_compositions:
+            comp_text = material_compositions.get(lang, "")
+            if comp_text:
+                base_text = f"{base_text}: {comp_text}"
         
-        if component_parts:
-            full_text = f"{base_text}. " + ": ".join(component_parts)
-        else:
-            full_text = base_text
-        
-        result[lang] = full_text
+        result[lang] = base_text
     
     # Build final formatted string
     formatted = [f"|EN| {translation_row.get('EN', product_name)}"]
@@ -708,25 +678,37 @@ def format_product_translations(product_name, translation_row, components_data, 
     return " ".join(formatted)
 
 
-def build_composition_text(components_data, materials_df, comp_translations_df):
-    """Build full composition text with all components and all languages"""
-    composition_parts = []
+def build_composition_text_simple(materials, materials_df, comp_instructions_df, comp_inst_text=""):
+    """Build composition text for Simple Mode (no component name)"""
+    materials_parts = []
+    for mat in materials:
+        if mat["mat"] not in (None, "", "—") and mat["pct"] > 0:
+            mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
+            materials_parts.append(mat_text)
     
+    final_text = ", ".join(materials_parts)
+    
+    if comp_inst_text:
+        inst_text = get_instruction_all_languages(comp_inst_text, comp_instructions_df)
+        if inst_text:
+            final_text += f" (Composition Instructions: {inst_text})"
+    
+    return final_text
+
+
+def build_composition_text_advanced(components_data, materials_df, comp_translations_df):
+    """Build composition text for Advanced Mode (with component names)"""
+    composition_parts = []
     for comp in components_data:
         comp_name = comp.get("name", "")
         materials = comp.get("materials", [])
         
-        # Get component name in all languages
         comp_name_translated = get_component_name_translations(comp_name, comp_translations_df)
         
-        # Get materials in all languages
         materials_parts = []
         for mat in materials:
-            mat_name = mat.get("mat", "")
-            pct = mat.get("pct", 0)
-            if mat_name and pct > 0:
-                mat_text = get_material_all_languages(mat_name, pct, materials_df)
-                materials_parts.append(mat_text)
+            mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
+            materials_parts.append(mat_text)
         
         materials_text = ", ".join(materials_parts)
         composition_parts.append(f"{comp_name_translated}: {materials_text}")
@@ -838,19 +820,18 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     selected_materials = []
     cotton_value = ""
     components_data = []
+    material_compositions = {}
     
     if not use_advanced_mode:
         # ========================================================
         # SIMPLE MODE (Single Component - No Default)
         # ========================================================
         
-        # Initialize empty materials if not exists
         if "simple_materials" not in st.session_state:
-            st.session_state.simple_materials = []  # খালি থেকে শুরু
+            st.session_state.simple_materials = []
         
         st.markdown("**Materials:**")
         
-        # Show existing materials
         for idx, mat in enumerate(st.session_state.simple_materials):
             col_mat, col_pct, col_del = st.columns([2, 1.5, 0.5])
             with col_mat:
@@ -864,15 +845,13 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                     st.session_state.simple_materials.pop(idx)
                     st.rerun()
         
-        # Add Material button
         if st.button("➕ Add Material", key="simple_add_mat"):
             if len(st.session_state.simple_materials) < 5:
                 st.session_state.simple_materials.append({"mat": "", "pct": 0})
                 st.rerun()
         
-        # Calculate total only if materials exist
-        simple_total = 0
         valid_materials = []
+        simple_total = 0
         if st.session_state.simple_materials:
             valid_materials = [m for m in st.session_state.simple_materials if m["mat"] not in (None, "", "—") and m["pct"] > 0]
             simple_total = sum(m["pct"] for m in valid_materials)
@@ -890,30 +869,27 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         
         simple_comp_inst = st.selectbox("Composition Instructions (Optional)", options=comp_inst_options, key="simple_comp_inst")
         
-        # Reset variables
-        final_composition_text = ""
-        selected_materials = []
-        cotton_value = ""
-        components_data = []
-        
-        # Build components_data ONLY if valid materials exist and total is 100%
         if valid_materials and simple_total == 100:
-            # Simple Mode: No component name, only materials
-            materials_parts = []
+            # Build composition text - Simple Mode: only materials
+            final_composition_text = build_composition_text_simple(
+                valid_materials, materials_df, comp_instructions_df, simple_comp_inst
+            )
+            
+            # Collect selected materials for AL/MK translation
             for mat in valid_materials:
-                if mat["mat"] not in (None, "", "—") and mat["pct"] > 0:
-                    mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
-                    materials_parts.append(mat_text)
-                    if mat["mat"] not in selected_materials:
-                        selected_materials.append(mat["mat"])
+                if mat["mat"] not in selected_materials:
+                    selected_materials.append(mat["mat"])
             
-            final_composition_text = ", ".join(materials_parts)
-            
-            # Add instructions if present
-            if simple_comp_inst:
-                inst_text = get_instruction_all_languages(simple_comp_inst, comp_instructions_df)
-                if inst_text:
-                    final_composition_text += f" (Composition Instructions: {inst_text})"
+            # Build material compositions for AL/MK
+            if selected_materials and not material_translations_df.empty:
+                for lang in ['AL', 'MK']:
+                    comp_parts = []
+                    for mat in valid_materials:
+                        t = material_translations_df[(material_translations_df['material'] == mat['mat']) & (material_translations_df['language'] == lang)]
+                        if not t.empty:
+                            comp_parts.append(f"{mat['pct']}% {t['translation'].iloc[0]}")
+                    if comp_parts:
+                        material_compositions[lang] = ", ".join(comp_parts)
             
             if len(selected_materials) == 1 and selected_materials[0].lower() == "cotton" and simple_total == 100:
                 cotton_value = "Y"
@@ -922,7 +898,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 with st.expander("📋 Preview Composition (All Languages)"):
                     st.write(final_composition_text)
         else:
-            # No valid composition yet
             final_composition_text = ""
             selected_materials = []
             cotton_value = ""
@@ -938,11 +913,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             component_options = ["Main fabric", "Lining", "Pocket bag", "Trim", "Hood", "Collar", "Cuff"]
         
         if "components" not in st.session_state:
-            st.session_state.components = []  # খালি থেকে শুরু
+            st.session_state.components = []
         if "next_component_id" not in st.session_state:
             st.session_state.next_component_id = 1
         
-        # Show existing components
         for idx, comp in enumerate(st.session_state.components):
             comp_id = comp.get("id", idx)
             st.divider()
@@ -954,12 +928,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                     st.session_state.components.pop(idx)
                     st.rerun()
             
-            # Component Name
             comp_name = comp.get("component_name", "Main fabric")
             comp_name_idx = component_options.index(comp_name) if comp_name in component_options else 0
             comp["component_name"] = st.selectbox("Component Name", options=component_options, index=comp_name_idx, key=f"comp_name_{comp_id}")
             
-            # Composition Instructions (Optional)
             comp_inst_idx = comp_inst_options.index(comp.get("comp_inst", "")) if comp.get("comp_inst", "") in comp_inst_options else 0
             comp["comp_inst"] = st.selectbox("Composition Instructions (Optional)", options=comp_inst_options, index=comp_inst_idx, key=f"comp_inst_{comp_id}")
             
@@ -967,7 +939,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             if not comp.get("materials"):
                 comp["materials"] = []
             
-            # Show materials for this component
             for mat_idx, mat in enumerate(comp["materials"]):
                 col_mat, col_pct, col_del = st.columns([2, 1.5, 0.5])
                 with col_mat:
@@ -986,7 +957,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                     comp["materials"].append({"mat": "", "pct": 0})
                     st.rerun()
             
-            # Calculate component total
             valid_comp_materials = [m for m in comp["materials"] if m["mat"] not in (None, "", "—") and m["pct"] > 0]
             comp_total = sum(m["pct"] for m in valid_comp_materials)
             
@@ -999,7 +969,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             elif not comp["materials"]:
                 st.info("📌 Click 'Add Material' to start")
         
-        # Add Component button
         col_add, _ = st.columns([1, 4])
         with col_add:
             if len(st.session_state.components) < 5:
@@ -1013,8 +982,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         # Build components_data and composition text
         components_data = []
         selected_materials = []
-        cotton_value = ""
-        final_composition_text = ""
         
         for comp in st.session_state.components:
             valid_comp_materials = [m for m in comp["materials"] if m["mat"] not in (None, "", "—") and m["pct"] > 0]
@@ -1033,24 +1000,26 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 if mat["mat"] not in selected_materials:
                     selected_materials.append(mat["mat"])
         
-        # Build composition text only if components exist
         if components_data:
-            composition_parts = []
-            for comp in components_data:
-                comp_name = comp.get("name", "")
-                materials = comp.get("materials", [])
-                
-                comp_name_translated = get_component_name_translations(comp_name, comp_translations_df)
-                
-                materials_parts = []
-                for mat in materials:
-                    mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
-                    materials_parts.append(mat_text)
-                
-                materials_text = ", ".join(materials_parts)
-                composition_parts.append(f"{comp_name_translated}: {materials_text}")
+            final_composition_text = build_composition_text_advanced(components_data, materials_df, comp_translations_df)
             
-            final_composition_text = " | ".join(composition_parts)
+            # Build material compositions for AL/MK
+            if selected_materials and not material_translations_df.empty:
+                for lang in ['AL', 'MK']:
+                    comp_parts = []
+                    for mat_name in selected_materials:
+                        t = material_translations_df[(material_translations_df['material'] == mat_name) & (material_translations_df['language'] == lang)]
+                        if not t.empty:
+                            # Find percentage for this material
+                            for comp in components_data:
+                                for mat in comp.get("materials", []):
+                                    if mat.get("mat") == mat_name:
+                                        comp_parts.append(f"{mat.get('pct', 0)}% {t['translation'].iloc[0]}")
+                                        break
+                                if comp_parts and comp_parts[-1].endswith(t['translation'].iloc[0]):
+                                    break
+                    if comp_parts:
+                        material_compositions[lang] = ", ".join(comp_parts)
             
             if len(selected_materials) == 1 and selected_materials[0].lower() == "cotton":
                 cotton_value = "Y"
@@ -1107,50 +1076,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.write(care_inst_translated)
 
     # ============================================================
-    # Material Translation for AL / MK (for product_name)
-    # ============================================================
-    material_trans_dict = {}
-    material_compositions = {}
-    
-    # Collect all materials with their percentages from UI
-    materials_with_pct = {}
-    
-    if not use_advanced_mode:
-        # Simple Mode - get from simple_materials
-        if 'simple_materials' in st.session_state:
-            for mat in st.session_state.simple_materials:
-                if mat.get("mat") and mat.get("mat") not in (None, "", "—") and mat.get("pct", 0) > 0:
-                    materials_with_pct[mat["mat"]] = mat["pct"]
-    else:
-        # Advanced Mode - get from components
-        if 'components' in st.session_state:
-            for comp in st.session_state.components:
-                for mat in comp.get("materials", []):
-                    if mat.get("mat") and mat.get("mat") not in (None, "", "—") and mat.get("pct", 0) > 0:
-                        materials_with_pct[mat["mat"]] = mat["pct"]
-    
-    # Now build translations
-    if materials_with_pct and not material_translations_df.empty:
-        for lang in ['AL', 'MK']:
-            names = []
-            comp_parts = []
-            
-            for mat_name, pct in materials_with_pct.items():
-                t = material_translations_df[(material_translations_df['material'] == mat_name) & (material_translations_df['language'] == lang)]
-                if not t.empty:
-                    tr = t['translation'].iloc[0]
-                    names.append(tr)
-                    comp_parts.append(f"{pct}% {tr}")
-            
-            if names:
-                material_trans_dict[lang] = ", ".join(names)
-            if comp_parts:
-                material_compositions[lang] = ", ".join(comp_parts)
-    
-    # For debugging (remove after testing)
-    if material_compositions:
-        st.success(f"✅ AL/MK Translation ready: {list(material_compositions.keys())}")
-    # ============================================================
     # DataFrame enrichment
     # ============================================================
     df['Dept'] = df['Item_classification'].apply(get_dept_value)
@@ -1167,7 +1092,8 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             product_type, 
             product_row.iloc[0], 
             components_data,
-            comp_translations_df
+            comp_translations_df,
+            material_compositions
         )
     else:
         df['product_name'] = ""
