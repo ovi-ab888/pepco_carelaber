@@ -841,12 +841,16 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     
     if not use_advanced_mode:
         # ========================================================
-        # SIMPLE MODE (Single Component)
+        # SIMPLE MODE (Single Component - No Default)
         # ========================================================
+        
+        # Initialize empty materials if not exists
         if "simple_materials" not in st.session_state:
-            st.session_state.simple_materials = [{"mat": "Cotton", "pct": 100}]
+            st.session_state.simple_materials = []  # খালি থেকে শুরু
         
         st.markdown("**Materials:**")
+        
+        # Show existing materials
         for idx, mat in enumerate(st.session_state.simple_materials):
             col_mat, col_pct, col_del = st.columns([2, 1.5, 0.5])
             with col_mat:
@@ -856,65 +860,78 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             with col_pct:
                 mat["pct"] = st.number_input("%" if idx == 0 else f"% {idx+1}", min_value=0, max_value=100, step=1, value=mat["pct"], key=f"simple_pct_{idx}")
             with col_del:
-                if len(st.session_state.simple_materials) > 1:
-                    if st.button("❌", key=f"simple_del_{idx}"):
-                        st.session_state.simple_materials.pop(idx)
-                        st.rerun()
+                if st.button("❌", key=f"simple_del_{idx}"):
+                    st.session_state.simple_materials.pop(idx)
+                    st.rerun()
         
+        # Add Material button
         if st.button("➕ Add Material", key="simple_add_mat"):
             if len(st.session_state.simple_materials) < 5:
-                st.session_state.simple_materials.append({"mat": "Cotton", "pct": 0})
+                st.session_state.simple_materials.append({"mat": "Cotton", "pct": 100})
                 st.rerun()
         
-        simple_total = sum(m["pct"] for m in st.session_state.simple_materials if m["mat"] not in (None, "—"))
+        # Calculate total only if materials exist
+        simple_total = 0
+        if st.session_state.simple_materials:
+            simple_total = sum(m["pct"] for m in st.session_state.simple_materials if m["mat"] not in (None, "—"))
+        
         if simple_total == 100:
             st.success(f"✅ Total: {simple_total}%")
-        elif simple_total < 100:
+        elif simple_total > 0 and simple_total < 100:
             st.warning(f"⚠️ Total: {simple_total}% (need {100 - simple_total}% more)")
-        else:
+        elif simple_total > 100:
             st.error(f"❌ Total exceeds 100%! Current: {simple_total}%")
+        else:
+            st.info("📌 Click 'Add Material' to start")
         
         simple_comp_inst = st.selectbox("Composition Instructions (Optional)", options=comp_inst_options, key="simple_comp_inst")
         
-        # Build components_data for simple mode
-        components_data = [{
-            "name": "Main fabric",
-            "materials": st.session_state.simple_materials.copy()
-        }]
-        
-        # Build composition text for simple mode
-        composition_parts = []
-        for comp in components_data:
-            comp_name = comp.get("name", "")
-            materials = comp.get("materials", [])
+        # Build components_data ONLY if materials exist
+        components_data = []
+        if st.session_state.simple_materials and simple_total == 100:
+            components_data = [{
+                "name": "Main fabric",
+                "materials": st.session_state.simple_materials.copy()
+            }]
             
-            comp_name_translated = get_component_name_translations(comp_name, comp_translations_df)
+            # Build composition text
+            composition_parts = []
+            for comp in components_data:
+                comp_name = comp.get("name", "")
+                materials = comp.get("materials", [])
+                
+                comp_name_translated = get_component_name_translations(comp_name, comp_translations_df)
+                
+                materials_parts = []
+                for mat in materials:
+                    if mat["mat"] not in (None, "—") and mat["pct"] > 0:
+                        mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
+                        materials_parts.append(mat_text)
+                        if mat["mat"] not in selected_materials:
+                            selected_materials.append(mat["mat"])
+                
+                materials_text = ", ".join(materials_parts)
+                composition_parts.append(f"{comp_name_translated}: {materials_text}")
             
-            materials_parts = []
-            for mat in materials:
-                if mat["mat"] not in (None, "—") and mat["pct"] > 0:
-                    mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
-                    materials_parts.append(mat_text)
-                    if mat["mat"] not in selected_materials:
-                        selected_materials.append(mat["mat"])
+            final_composition_text = " | ".join(composition_parts)
             
-            materials_text = ", ".join(materials_parts)
-            composition_parts.append(f"{comp_name_translated}: {materials_text}")
-        
-        final_composition_text = " | ".join(composition_parts)
-        
-        # Add instructions if present
-        if simple_comp_inst:
-            inst_text = get_instruction_all_languages(simple_comp_inst, comp_instructions_df)
-            if inst_text:
-                final_composition_text += f" (Composition Instructions: {inst_text})"
-        
-        if len(selected_materials) == 1 and selected_materials[0].lower() == "cotton" and simple_total == 100:
-            cotton_value = "Y"
-        
-        if final_composition_text:
-            with st.expander("📋 Preview Composition (All Languages)"):
-                st.write(final_composition_text)
+            # Add instructions if present
+            if simple_comp_inst:
+                inst_text = get_instruction_all_languages(simple_comp_inst, comp_instructions_df)
+                if inst_text:
+                    final_composition_text += f" (Composition Instructions: {inst_text})"
+            
+            if len(selected_materials) == 1 and selected_materials[0].lower() == "cotton" and simple_total == 100:
+                cotton_value = "Y"
+            
+            if final_composition_text:
+                with st.expander("📋 Preview Composition (All Languages)"):
+                    st.write(final_composition_text)
+        else:
+            # No valid composition yet
+            final_composition_text = ""
+            if st.session_state.simple_materials and simple_total != 100:
+                st.warning("⚠️ Please ensure total percentage is 100% before proceeding")
     
     else:
         # ========================================================
