@@ -1088,24 +1088,32 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     # ============================================================
     material_trans_dict = {}
     material_compositions = {}
+    
     if selected_materials and not material_translations_df.empty:
         for lang in ['AL', 'MK']:
             names = []
-            comp = []
+            comp_parts = []
+            
             for mat_name in selected_materials:
                 t = material_translations_df[(material_translations_df['material'] == mat_name) & (material_translations_df['language'] == lang)]
                 if not t.empty:
                     tr = t['translation'].iloc[0]
                     names.append(tr)
-                    # Find percentage for this material
-                    for comp in components_data:
-                        for mat in comp.get("materials", []):
-                            if mat.get("mat") == mat_name:
-                                comp.append(f"{mat.get('pct', 0)}% {tr}")
+                    
+                    # Find percentage for this material from components_data
+                    if components_data:
+                        for component in components_data:
+                            for mat in component.get("materials", []):
+                                if mat.get("mat") == mat_name:
+                                    comp_parts.append(f"{mat.get('pct', 0)}% {tr}")
+                    else:
+                        # Fallback if components_data is empty
+                        comp_parts.append(f"100% {tr}")
+            
             if names:
                 material_trans_dict[lang] = ", ".join(names)
-            if comp:
-                material_compositions[lang] = ", ".join(comp)
+            if comp_parts:
+                material_compositions[lang] = ", ".join(comp_parts)
 
     # ============================================================
     # DataFrame enrichment
