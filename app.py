@@ -880,6 +880,99 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             "materials": st.session_state.simple_materials.copy()
         }]
         
+     else:
+        # ADVANCED MODE
+        component_options = []
+        if not comp_translations_df.empty:
+            component_options = comp_translations_df['EN'].dropna().astype(str).tolist()
+        if not component_options:
+            component_options = ["Main fabric", "Lining", "Pocket bag", "Trim", "Hood", "Collar", "Cuff"]
+        
+        if "components" not in st.session_state:
+            st.session_state.components = [{"id": 1, "component_name": "Main fabric", "comp_inst": "", "materials": [{"mat": "Cotton", "pct": 100}]}]
+        if "next_component_id" not in st.session_state:
+            st.session_state.next_component_id = 2
+        
+        for idx, comp in enumerate(st.session_state.components):
+            comp_id = comp.get("id", idx)
+            st.divider()
+            col_title, col_delete = st.columns([5, 1])
+            with col_title:
+                st.markdown(f"**Component {idx + 1}**")
+            with col_delete:
+                if len(st.session_state.components) > 1:
+                    if st.button("Remove", key=f"remove_comp_{comp_id}"):
+                        st.session_state.components.pop(idx)
+                        st.rerun()
+            
+            # Use "component_name" instead of "name"
+            comp_name = comp.get("component_name", "Main fabric")
+            comp_name_idx = component_options.index(comp_name) if comp_name in component_options else 0
+            comp["component_name"] = st.selectbox("Component Name", options=component_options, index=comp_name_idx, key=f"comp_name_{comp_id}")
+            
+            # Optional instructions for this component
+            comp_inst_idx = comp_inst_options.index(comp.get("comp_inst", "")) if comp.get("comp_inst", "") in comp_inst_options else 0
+            comp["comp_inst"] = st.selectbox("Composition Instructions (Optional)", options=comp_inst_options, index=comp_inst_idx, key=f"comp_inst_{comp_id}")
+            
+            st.markdown("**Materials:**")
+            if not comp.get("materials"):
+                comp["materials"] = [{"mat": "Cotton", "pct": 100}]
+            
+            for mat_idx, mat in enumerate(comp["materials"]):
+                col_mat, col_pct, col_del = st.columns([2, 1.5, 0.5])
+                with col_mat:
+                    mat_options = ["—"] + materials_options
+                    mat_idx_val = mat_options.index(mat["mat"]) if mat["mat"] in mat_options else 0
+                    mat["mat"] = st.selectbox("Material" if mat_idx == 0 else f"Material {mat_idx + 1}", options=mat_options, index=mat_idx_val, key=f"mat_{comp_id}_{mat_idx}")
+                with col_pct:
+                    mat["pct"] = st.number_input("%" if mat_idx == 0 else f"% {mat_idx + 1}", min_value=0, max_value=100, step=1, value=mat["pct"], key=f"pct_{comp_id}_{mat_idx}")
+                with col_del:
+                    if len(comp["materials"]) > 1:
+                        if st.button("❌", key=f"del_mat_{comp_id}_{mat_idx}"):
+                            comp["materials"].pop(mat_idx)
+                            st.rerun()
+            
+            if st.button("Add Material", key=f"add_mat_{comp_id}"):
+                if len(comp["materials"]) < 5:
+                    comp["materials"].append({"mat": "Cotton", "pct": 0})
+                    st.rerun()
+            
+            comp_total = sum(m["pct"] for m in comp["materials"] if m["mat"] not in (None, "—"))
+            if comp_total == 100:
+                st.success(f"Component Total: {comp_total}%")
+            elif comp_total < 100:
+                st.warning(f"Component Total: {comp_total}% (need {100 - comp_total}% more)")
+            else:
+                st.error(f"Component Total exceeds 100%! Current: {comp_total}%")
+        
+        col_add, _ = st.columns([1, 4])
+        with col_add:
+            if len(st.session_state.components) < 5:
+                if st.button("Add Component", key="add_component_btn"):
+                    st.session_state.components.append({"id": st.session_state.next_component_id, "component_name": "Main fabric", "comp_inst": "", "materials": [{"mat": "Cotton", "pct": 100}]})
+                    st.session_state.next_component_id += 1
+                    st.rerun()
+            else:
+                st.info("Maximum 5 components allowed")
+        
+        # Build components_data and composition text
+        components_data = []
+        for comp in st.session_state.components:
+            comp_total = sum(m["pct"] for m in comp["materials"] if m["mat"] not in (None, "—"))
+            if comp_total != 100:
+                continue
+            
+            comp_data = {
+                "name": comp.get("component_name", "Main fabric"),
+                "materials": [m for m in comp["materials"] if m["mat"] not in (None, "—") and m["pct"] > 0]
+            }
+            components_data.append(comp_data)
+            
+            for mat in comp["materials"]:
+                if mat["mat"] not in (None, "—") and mat["pct"] > 0:
+                    if mat["mat"] not in selected_materials:
+                        selected_materials.append(mat["mat"])
+        
         # Build composition text
         composition_parts = []
         for comp in components_data:
@@ -890,24 +983,15 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             
             materials_parts = []
             for mat in materials:
-                if mat["mat"] not in (None, "—") and mat["pct"] > 0:
-                    mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
-                    materials_parts.append(mat_text)
-                    if mat["mat"] not in selected_materials:
-                        selected_materials.append(mat["mat"])
+                mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
+                materials_parts.append(mat_text)
             
             materials_text = ", ".join(materials_parts)
             composition_parts.append(f"{comp_name_translated}: {materials_text}")
         
         final_composition_text = " | ".join(composition_parts)
         
-        # Add instructions if present
-        if simple_comp_inst:
-            inst_text = get_instruction_all_languages(simple_comp_inst, comp_instructions_df)
-            if inst_text:
-                final_composition_text += f" (Composition Instructions: {inst_text})"
-        
-        if len(selected_materials) == 1 and selected_materials[0].lower() == "cotton" and simple_total == 100:
+        if len(selected_materials) == 1 and selected_materials[0].lower() == "cotton":
             cotton_value = "Y"
         
         if final_composition_text:
