@@ -573,6 +573,36 @@ def clean_item_name_english(name: str) -> str:
 
 
 # ================================================================
+#  GET MATERIAL TRANSLATIONS IN ALL LANGUAGES
+# ================================================================
+def get_material_translations_all_languages(material_name, percentage, materials_df):
+    """
+    Get material translation in all available languages from Google Sheet.
+    Returns format: "80% Cotton / Pambuk / Памук / ..."
+    """
+    if materials_df.empty or not material_name:
+        return f"{percentage}% {material_name}"
+    
+    # Find row with the material name (EN column is first column)
+    en_col = materials_df.columns[0]
+    row = materials_df[materials_df[en_col].astype(str).str.strip() == material_name]
+    
+    if row.empty:
+        return f"{percentage}% {material_name}"
+    
+    # Collect translations from all columns
+    translations = []
+    for col in materials_df.columns:
+        val = row.iloc[0][col]
+        if pd.notna(val) and str(val).strip():
+            translations.append(str(val).strip())
+    
+    # Format: "80% Cotton / Pambuk / Памук / ..."
+    translated_text = " / ".join(translations)
+    return f"{percentage}% {translated_text}"
+    
+
+# ================================================================
 # PART 3 — PDF EXTRACTION
 # ================================================================
 
@@ -1065,7 +1095,38 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         else:
             st.error(f"⚠️ Total exceeds 100%! Current: {running_total}%")
     
-    composition_materials_text = ", ".join([f"{r['pct']}% {r['mat']}" for r in valid_rows])
+        # Generate composition materials text in all languages
+    composition_materials_parts = []
+    
+    for r in valid_rows:
+        mat_name = r["mat"]
+        pct = r["pct"]
+        
+        # Get translation in all languages
+        if mat_name and not composition_data["materials"].empty:
+            materials_df = composition_data["materials"]
+            en_col = materials_df.columns[0]
+            row = materials_df[materials_df[en_col].astype(str).str.strip() == mat_name]
+            
+            if not row.empty:
+                translations = []
+                for col in materials_df.columns:
+                    val = row.iloc[0][col]
+                    if pd.notna(val) and str(val).strip():
+                        translations.append(str(val).strip())
+                
+                # Format: "80% Cotton / Pambuk / Памук / ..."
+                translated_mat = " / ".join(translations)
+                composition_materials_parts.append(f"{pct}% {translated_mat}")
+            else:
+                # Fallback if material not found in sheet
+                composition_materials_parts.append(f"{pct}% {mat_name}")
+        else:
+            # Fallback
+            composition_materials_parts.append(f"{pct}% {mat_name}")
+    
+    # Join all materials with comma
+    composition_materials_text = ", ".join(composition_materials_parts)
     
     # Get translated text for Composition Instructions (all languages)
     comp_inst_translated = ""
@@ -1095,37 +1156,70 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             cotton_value = "Y"
 
     # ============================================================
-    # CARE INSTRUCTIONS UI (Separate Section)
+    # CARE INSTRUCTIONS UI (Multiple Select with +Add button)
     # ============================================================
     st.markdown("### 🏷️ Care Instructions")
     
+    # Session state for multiple care instructions
+    if "care_inst_list" not in st.session_state:
+        st.session_state.care_inst_list = []
+    
+    # Get options from Google Sheet
     care_inst_options = []
     if not composition_data["care_instructions"].empty:
         en_col = composition_data["care_instructions"].columns[0]
         care_inst_options = composition_data["care_instructions"][en_col].dropna().astype(str).tolist()
     
-    selected_care_inst = st.selectbox(
-        "Select Care Instructions",
-        options=[""] + care_inst_options,
-        key="care_inst_select"
-    )
+    # Display existing care instructions
+    if st.session_state.care_inst_list:
+        st.write("**Selected Care Instructions:**")
+        for idx, selected in enumerate(st.session_state.care_inst_list):
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                st.write(f"• {selected}")
+            with col2:
+                if st.button("❌ Remove", key=f"remove_care_{idx}"):
+                    st.session_state.care_inst_list.pop(idx)
+                    st.rerun()
     
-    care_inst_translated = ""
-    if selected_care_inst and not composition_data["care_instructions"].empty:
-        df_care = composition_data["care_instructions"]
-        en_col = df_care.columns[0]
-        row = df_care[df_care[en_col].astype(str).str.strip() == selected_care_inst]
-        if not row.empty:
-            translations = []
-            for col in df_care.columns:
-                val = row.iloc[0][col]
-                if pd.notna(val) and str(val).strip():
-                    translations.append(str(val).strip())
-            care_inst_translated = " / ".join(translations)
+    # Add new care instruction
+    col_add_care, col_empty = st.columns([2, 3])
+    with col_add_care:
+        new_care_inst = st.selectbox(
+            "Add Care Instruction",
+            options=[""] + care_inst_options,
+            key="new_care_inst_select"
+        )
         
-        if care_inst_translated:
-            with st.expander("📋 Preview Care Instructions (All Languages)"):
-                st.write(care_inst_translated)
+        if st.button("➕ Add Care Instruction", key="add_care_inst_btn"):
+            if new_care_inst and new_care_inst not in st.session_state.care_inst_list:
+                st.session_state.care_inst_list.append(new_care_inst)
+                st.rerun()
+            elif new_care_inst in st.session_state.care_inst_list:
+                st.warning("⚠️ This instruction already added!")
+    
+    # Get translated text for all selected Care Instructions
+    all_care_inst_translated = []
+    for selected_care_inst in st.session_state.care_inst_list:
+        if selected_care_inst and not composition_data["care_instructions"].empty:
+            df_care = composition_data["care_instructions"]
+            en_col = df_care.columns[0]
+            row = df_care[df_care[en_col].astype(str).str.strip() == selected_care_inst]
+            if not row.empty:
+                translations = []
+                for col in df_care.columns:
+                    val = row.iloc[0][col]
+                    if pd.notna(val) and str(val).strip():
+                        translations.append(str(val).strip())
+                all_care_inst_translated.append(" / ".join(translations))
+    
+    # Join multiple care instructions with comma
+    care_inst_translated = ", ".join(all_care_inst_translated) if all_care_inst_translated else ""
+    
+    # Preview
+    if care_inst_translated:
+        with st.expander("📋 Preview Care Instructions (All Languages)"):
+            st.write(care_inst_translated)
 
     # ============================================================
     # Material Translation for AL / MK
