@@ -1386,7 +1386,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 "Batch", "barcode", "washing_code", "EUR", "BGN",
                 "BAM", "PLN", "RON", "CZK", "UAH", "MKD", "RSD", "HUF",
                 "product_name", "Dept", "Item_name_English", "Season",
-                "Composition_Instructions", "Composition_Materials", "Care_Instructions"
+                "Composition", "Care_Instructions"
             ]
 
             if 'Cotton' in df.columns and 'Cotton' not in final_cols:
