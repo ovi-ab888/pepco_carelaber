@@ -1009,29 +1009,71 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     # Load data from Google Sheet
     composition_data = load_care_composition_data()
     
+    # Materials options from Google Sheet
+    materials_options = []
+    if not composition_data["materials"].empty:
+        en_col = composition_data["materials"].columns[0]
+        materials_options = composition_data["materials"][en_col].dropna().astype(str).tolist()
+    if not materials_options:
+        materials_options = ["Cotton", "Polyester", "Elastane", "Nylon", "Wool", "Linen", "Silk", "Viscose"]
+    
+    # Composition Instructions options
+    comp_inst_options = [""]  # Empty for "no instructions"
+    if not composition_data["comp_instructions"].empty:
+        en_col = composition_data["comp_instructions"].columns[0]
+        comp_inst_options.extend(composition_data["comp_instructions"][en_col].dropna().astype(str).tolist())
+    
+    # Helper function: Get material translation in all languages
+    def get_material_all_languages(mat_name, pct):
+        if mat_name and mat_name != "—" and not composition_data["materials"].empty:
+            df = composition_data["materials"]
+            en_col = df.columns[0]
+            row = df[df[en_col].astype(str).str.strip() == mat_name]
+            if not row.empty:
+                translations = []
+                for col in df.columns:
+                    val = row.iloc[0][col]
+                    if pd.notna(val) and str(val).strip():
+                        translations.append(str(val).strip())
+                return f"{pct}% {' / '.join(translations)}"
+        return f"{pct}% {mat_name}"
+    
+    # Helper function: Get instruction translation in all languages
+    def get_instruction_all_languages(inst_text):
+        if inst_text and not composition_data["comp_instructions"].empty:
+            df = composition_data["comp_instructions"]
+            en_col = df.columns[0]
+            row = df[df[en_col].astype(str).str.strip() == inst_text]
+            if not row.empty:
+                translations = []
+                for col in df.columns:
+                    val = row.iloc[0][col]
+                    if pd.notna(val) and str(val).strip():
+                        translations.append(str(val).strip())
+                return " / ".join(translations)
+        return ""
+    
     # Mode Selection
     use_advanced_mode = st.checkbox(
         "🔧 Enable Multiple Components", 
         help="Turn ON for products with multiple parts (e.g., Main fabric + Pocket bag)"
     )
     
+    # Initialize variables
+    final_composition_text = ""
+    selected_materials = []
+    cotton_value = ""
+    
     if not use_advanced_mode:
         # ========================================================
         # SIMPLE MODE (Single Component - No Component Name)
         # ========================================================
-        st.markdown("**Materials:**")
-        
-        # Materials options
-        materials_options = []
-        if not composition_data["materials"].empty:
-            en_col = composition_data["materials"].columns[0]
-            materials_options = composition_data["materials"][en_col].dropna().astype(str).tolist()
-        if not materials_options:
-            materials_options = ["Cotton", "Polyester", "Elastane", "Nylon", "Wool"]
         
         # Session for simple mode
         if "simple_materials" not in st.session_state:
             st.session_state.simple_materials = [{"mat": "Cotton", "pct": 100}]
+        
+        st.markdown("**Materials:**")
         
         # Display material rows
         for idx, mat in enumerate(st.session_state.simple_materials):
@@ -1077,50 +1119,20 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.error(f"❌ Total exceeds 100%! Current: {simple_total}%")
         
         # Composition Instructions (Optional)
-        comp_inst_options = [""]
-        if not composition_data["comp_instructions"].empty:
-            en_col = composition_data["comp_instructions"].columns[0]
-            comp_inst_options.extend(composition_data["comp_instructions"][en_col].dropna().astype(str).tolist())
-        
         simple_comp_inst = st.selectbox(
             "Composition Instructions (Optional)",
             options=comp_inst_options,
             key="simple_comp_inst"
         )
         
-        # Generate final text
-        def get_material_all_languages(mat_name, pct):
-            if mat_name and not composition_data["materials"].empty:
-                df = composition_data["materials"]
-                en_col = df.columns[0]
-                row = df[df[en_col].astype(str).str.strip() == mat_name]
-                if not row.empty:
-                    translations = []
-                    for col in df.columns:
-                        val = row.iloc[0][col]
-                        if pd.notna(val) and str(val).strip():
-                            translations.append(str(val).strip())
-                    return f"{pct}% {' / '.join(translations)}"
-            return f"{pct}% {mat_name}"
-        
-        def get_instruction_all_languages(inst_text):
-            if inst_text and not composition_data["comp_instructions"].empty:
-                df = composition_data["comp_instructions"]
-                en_col = df.columns[0]
-                row = df[df[en_col].astype(str).str.strip() == inst_text]
-                if not row.empty:
-                    translations = []
-                    for col in df.columns:
-                        val = row.iloc[0][col]
-                        if pd.notna(val) and str(val).strip():
-                            translations.append(str(val).strip())
-                    return " / ".join(translations)
-            return ""
-        
+        # Generate final text for Simple Mode
         materials_parts = []
+        selected_materials = []
         for mat in st.session_state.simple_materials:
             if mat["mat"] not in (None, "—") and mat["pct"] > 0:
                 materials_parts.append(get_material_all_languages(mat["mat"], mat["pct"]))
+                if mat["mat"] not in selected_materials:
+                    selected_materials.append(mat["mat"])
         
         materials_text = ", ".join(materials_parts)
         inst_text = get_instruction_all_languages(simple_comp_inst)
@@ -1130,11 +1142,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         else:
             final_composition_text = materials_text
         
-        # Selected materials for AL/MK
-        selected_materials = [m["mat"] for m in st.session_state.simple_materials if m["mat"] not in (None, "—") and m["pct"] > 0]
-        
-        # Cotton flag
-        cotton_value = ""
+        # Cotton flag for Simple Mode
         if len(selected_materials) == 1 and selected_materials[0].lower() == "cotton" and simple_total == 100:
             cotton_value = "Y"
         
@@ -1166,50 +1174,8 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         if "next_component_id" not in st.session_state:
             st.session_state.next_component_id = 2
         
-        # Materials options
-        materials_options = []
-        if not composition_data["materials"].empty:
-            en_col = composition_data["materials"].columns[0]
-            materials_options = composition_data["materials"][en_col].dropna().astype(str).tolist()
-        if not materials_options:
-            materials_options = ["Cotton", "Polyester", "Elastane", "Nylon", "Wool", "Linen", "Silk", "Viscose"]
-        
-        # Composition Instructions options
-        comp_inst_options = [""]
-        if not composition_data["comp_instructions"].empty:
-            en_col = composition_data["comp_instructions"].columns[0]
-            comp_inst_options.extend(composition_data["comp_instructions"][en_col].dropna().astype(str).tolist())
-        
-        def get_material_all_languages(mat_name, pct):
-            if mat_name and not composition_data["materials"].empty:
-                df = composition_data["materials"]
-                en_col = df.columns[0]
-                row = df[df[en_col].astype(str).str.strip() == mat_name]
-                if not row.empty:
-                    translations = []
-                    for col in df.columns:
-                        val = row.iloc[0][col]
-                        if pd.notna(val) and str(val).strip():
-                            translations.append(str(val).strip())
-                    return f"{pct}% {' / '.join(translations)}"
-            return f"{pct}% {mat_name}"
-        
-        def get_instruction_all_languages(inst_text):
-            if inst_text and not composition_data["comp_instructions"].empty:
-                df = composition_data["comp_instructions"]
-                en_col = df.columns[0]
-                row = df[df[en_col].astype(str).str.strip() == inst_text]
-                if not row.empty:
-                    translations = []
-                    for col in df.columns:
-                        val = row.iloc[0][col]
-                        if pd.notna(val) and str(val).strip():
-                            translations.append(str(val).strip())
-                    return " / ".join(translations)
-            return ""
-        
+        # Helper for component name translation (can add Google Sheet later)
         def get_component_all_languages(comp_name):
-            # For now, return EN only - can add translation sheet later
             return comp_name
         
         # Display each component
@@ -1308,7 +1274,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             else:
                 st.info("Maximum 5 components allowed")
         
-        # Generate final composition text
+        # Generate final composition text for Advanced Mode
         composition_parts = []
         selected_materials = []
         
@@ -1339,8 +1305,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         
         final_composition_text = " | ".join(composition_parts)
         
-        # Cotton flag
-        cotton_value = ""
+        # Cotton flag for Advanced Mode
         if len(selected_materials) == 1 and selected_materials[0].lower() == "cotton":
             for comp in st.session_state.components:
                 comp_total = sum(m["pct"] for m in comp["materials"] if m["mat"] not in (None, "—"))
