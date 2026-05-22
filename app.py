@@ -1124,19 +1124,48 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                     names.append(tr)
                     
                     # Find percentage for this material from components_data
+                    percentage = 0
                     if components_data:
                         for component in components_data:
                             for mat in component.get("materials", []):
                                 if mat.get("mat") == mat_name:
-                                    comp_parts.append(f"{mat.get('pct', 0)}% {tr}")
+                                    percentage = mat.get('pct', 0)
+                                    break
+                            if percentage > 0:
+                                break
+                    
+                    # If percentage found, add it; otherwise just add material name
+                    if percentage > 0:
+                        comp_parts.append(f"{percentage}% {tr}")
                     else:
-                        # Fallback if components_data is empty
-                        comp_parts.append(f"100% {tr}")
+                        # Fallback: try to find from simple_materials or components
+                        found = False
+                        if not use_advanced_mode and 'simple_materials' in st.session_state:
+                            for mat in st.session_state.simple_materials:
+                                if mat.get("mat") == mat_name:
+                                    comp_parts.append(f"{mat.get('pct', 0)}% {tr}")
+                                    found = True
+                                    break
+                        if not found and use_advanced_mode and 'components' in st.session_state:
+                            for comp in st.session_state.components:
+                                for mat in comp.get("materials", []):
+                                    if mat.get("mat") == mat_name:
+                                        comp_parts.append(f"{mat.get('pct', 0)}% {tr}")
+                                        found = True
+                                        break
+                                if found:
+                                    break
+                        if not found:
+                            comp_parts.append(f"100% {tr}")
             
             if names:
                 material_trans_dict[lang] = ", ".join(names)
             if comp_parts:
                 material_compositions[lang] = ", ".join(comp_parts)
+    
+    # For debugging (can remove later)
+    if material_compositions:
+        st.write(f"Debug - material_compositions: {material_compositions}")
 
     # ============================================================
     # DataFrame enrichment
