@@ -1067,17 +1067,6 @@ if final_composition_text:
 
 
 
-# ✅ What Improved
-
-* Cleaner UI
-* Same structure for Simple + Advanced
-* Less nested logic
-* Easy maintenance
-* Better validation
-* Better preview
-* Component cards
-* Easier future upgrade
-* Less session_state complexity
 
 
 
