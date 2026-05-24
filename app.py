@@ -1054,7 +1054,9 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     df['Collection'] = df.apply(lambda r: modify_collection(r['Collection'], r['Item_classification']), axis=1)
     
     # Format product translations with AL/MK compositions
-    def format_product_translations(product_name, translation_row, material_compositions=None, components_data=None, comp_translations_df=None):
+        def format_product_translations(product_name, translation_row, material_compositions=None, 
+                                     components_data=None, comp_translations_df=None, 
+                                     use_advanced_mode=False):  # new parameter
         """Build multilingual product description with component names in AL/MK"""
         
         # সঠিক ভাষার অর্ডার
@@ -1135,8 +1137,9 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             product_type, 
             product_row.iloc[0], 
             material_compositions,
-            components_data,  # যোগ করুন
-            comp_translations_df  # যোগ করুন
+            components_data,
+            comp_translations_df,
+            use_advanced_mode  # এইটা যোগ করুন
         )
     else:
         df['product_name'] = ""
