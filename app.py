@@ -794,10 +794,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.error("Please enter a valid number like 12.50 or 12,50")
             pln_price = None
 
-# Updated MATERIAL COMPOSITION UI (Clean Version)
-
-
-# MATERIAL COMPOSITION UI (With Simple/Advanced Mode)
 
 
 
@@ -815,9 +811,15 @@ comp_translations_df = load_component_translations()
 # Material Options
 # ------------------------------------------------------------
 materials_options = []
+
 if not materials_df.empty:
     en_col = materials_df.columns[0]
-    materials_options = materials_df[en_col].dropna().astype(str).tolist()
+    materials_options = (
+        materials_df[en_col]
+        .dropna()
+        .astype(str)
+        .tolist()
+    )
 
 if not materials_options:
     materials_options = [
@@ -833,8 +835,14 @@ if not materials_options:
 # Component Options
 # ------------------------------------------------------------
 component_options = []
+
 if not comp_translations_df.empty:
-    component_options = comp_translations_df['EN'].dropna().astype(str).tolist()
+    component_options = (
+        comp_translations_df["EN"]
+        .dropna()
+        .astype(str)
+        .tolist()
+    )
 
 if not component_options:
     component_options = [
@@ -857,33 +865,43 @@ use_advanced_mode = st.toggle(
 # ------------------------------------------------------------
 # Session State
 # ------------------------------------------------------------
-if "composition_blocks" not in st.session_state:
-    st.session_state.composition_blocks = []
+st.session_state.setdefault("composition_blocks", [])
 
 # ------------------------------------------------------------
 # Initialize Default Block
 # ------------------------------------------------------------
 if not st.session_state.composition_blocks:
+
     st.session_state.composition_blocks.append({
         "component_name": "Main fabric",
         "materials": [
-            {"mat": "", "pct": 0}
+            {
+                "mat": "",
+                "pct": 0
+            }
         ]
     })
 
 # ------------------------------------------------------------
-# Helper Functions
+# Helper Function
 # ------------------------------------------------------------
 def build_material_line(materials):
-    valid = []
+
+    parts = []
 
     for m in materials:
-        if m['mat'] and m['pct'] > 0:
-            valid.append(f"{m['pct']}% {m['mat']}")
 
-    return ", ".join(valid)
+        if m["mat"] and m["pct"] > 0:
 
+            parts.append(
+                f'{m["pct"]}% {m["mat"]}'
+            )
 
+    return ", ".join(parts)
+
+# ------------------------------------------------------------
+# Output Variables
+# ------------------------------------------------------------
 final_composition_text = ""
 selected_materials = []
 cotton_value = ""
@@ -896,33 +914,52 @@ for block_idx, block in enumerate(st.session_state.composition_blocks):
 
     with st.container(border=True):
 
-        top_col1, top_col2 = st.columns([5, 1])
+        top1, top2 = st.columns([5, 1])
 
         # ----------------------------------------------------
-        # Component Name (Only Advanced)
+        # Component Name
         # ----------------------------------------------------
-        with top_col1:
+        with top1:
+
             if use_advanced_mode:
-                current_name = block.get("component_name", "Main fabric")
-                name_index = component_options.index(current_name) if current_name in component_options else 0
+
+                current_name = block.get(
+                    "component_name",
+                    "Main fabric"
+                )
+
+                name_index = (
+                    component_options.index(current_name)
+                    if current_name in component_options
+                    else 0
+                )
 
                 block["component_name"] = st.selectbox(
-                    f"Component Name #{block_idx+1}",
+                    f"Component Name #{block_idx + 1}",
                     options=component_options,
                     index=name_index,
                     key=f"component_name_{block_idx}"
                 )
+
             else:
-                st.markdown(f"### Simple Composition")
+
+                st.markdown("#### Simple Composition")
 
         # ----------------------------------------------------
         # Remove Component
         # ----------------------------------------------------
-        with top_col2:
+        with top2:
+
             if len(st.session_state.composition_blocks) > 1:
+
                 st.write("")
                 st.write("")
-                if st.button("🗑️", key=f"remove_block_{block_idx}"):
+
+                if st.button(
+                    "🗑️",
+                    key=f"remove_block_{block_idx}"
+                ):
+
                     st.session_state.composition_blocks.pop(block_idx)
                     st.rerun()
 
@@ -935,9 +972,18 @@ for block_idx, block in enumerate(st.session_state.composition_blocks):
 
             c1, c2, c3 = st.columns([3, 1.5, 0.7])
 
+            # ------------------------------------------------
+            # Material
+            # ------------------------------------------------
             with c1:
+
                 mat_options = [""] + materials_options
-                mat_index = mat_options.index(mat["mat"]) if mat["mat"] in mat_options else 0
+
+                mat_index = (
+                    mat_options.index(mat["mat"])
+                    if mat["mat"] in mat_options
+                    else 0
+                )
 
                 mat["mat"] = st.selectbox(
                     "Material",
@@ -946,7 +992,11 @@ for block_idx, block in enumerate(st.session_state.composition_blocks):
                     key=f"mat_{block_idx}_{mat_idx}"
                 )
 
+            # ------------------------------------------------
+            # Percentage
+            # ------------------------------------------------
             with c2:
+
                 mat["pct"] = st.number_input(
                     "%",
                     min_value=0,
@@ -956,65 +1006,115 @@ for block_idx, block in enumerate(st.session_state.composition_blocks):
                     key=f"pct_{block_idx}_{mat_idx}"
                 )
 
+            # ------------------------------------------------
+            # Remove Material
+            # ------------------------------------------------
             with c3:
+
                 st.write("")
+
                 if len(block["materials"]) > 1:
-                    if st.button("❌", key=f"remove_mat_{block_idx}_{mat_idx}"):
+
+                    if st.button(
+                        "❌",
+                        key=f"remove_mat_{block_idx}_{mat_idx}"
+                    ):
+
                         block["materials"].pop(mat_idx)
                         st.rerun()
 
         # ----------------------------------------------------
         # Add Material Button
         # ----------------------------------------------------
-        if st.button("➕ Add Material", key=f"add_material_{block_idx}"):
-            block["materials"].append({"mat": "", "pct": 0})
+        if st.button(
+            "➕ Add Material",
+            key=f"add_material_{block_idx}"
+        ):
+
+            block["materials"].append({
+                "mat": "",
+                "pct": 0
+            })
+
             st.rerun()
 
         # ----------------------------------------------------
         # Validation
         # ----------------------------------------------------
         valid_materials = [
+
             m for m in block["materials"]
+
             if m["mat"] and m["pct"] > 0
         ]
 
-        total_pct = sum(m["pct"] for m in valid_materials)
+        total_pct = sum(
+            m["pct"]
+            for m in valid_materials
+        )
 
         if total_pct == 100:
+
             st.success(f"✅ Total = {total_pct}%")
+
         elif total_pct < 100 and total_pct > 0:
-            st.warning(f"⚠️ Remaining = {100-total_pct}%")
+
+            st.warning(
+                f"⚠️ Remaining = {100 - total_pct}%"
+            )
+
         elif total_pct > 100:
-            st.error(f"❌ Exceeded by {total_pct-100}%")
+
+            st.error(
+                f"❌ Exceeded by {total_pct - 100}%"
+            )
+
         else:
+
             st.info("Enter material composition")
 
         # ----------------------------------------------------
         # Preview
         # ----------------------------------------------------
-        preview_text = build_material_line(valid_materials)
+        preview_text = build_material_line(
+            valid_materials
+        )
 
         if preview_text:
+
             if use_advanced_mode:
-                full_preview = f"{block['component_name']}: {preview_text}"
+
+                full_preview = (
+                    f'{block["component_name"]}: '
+                    f'{preview_text}'
+                )
+
             else:
+
                 full_preview = preview_text
 
             st.code(full_preview)
 
         # ----------------------------------------------------
-        # Save Components Data
+        # Save Component Data
         # ----------------------------------------------------
         if valid_materials and total_pct == 100:
 
             components_data.append({
+
                 "name": block["component_name"],
+
                 "materials": valid_materials
+
             })
 
             for m in valid_materials:
-                if m['mat'] not in selected_materials:
-                    selected_materials.append(m['mat'])
+
+                if m["mat"] not in selected_materials:
+
+                    selected_materials.append(
+                        m["mat"]
+                    )
 
 # ============================================================
 # ADD COMPONENT BUTTON
@@ -1024,12 +1124,19 @@ if use_advanced_mode:
     if len(st.session_state.composition_blocks) < 5:
 
         if st.button("➕ Add Component"):
+
             st.session_state.composition_blocks.append({
+
                 "component_name": "Main fabric",
+
                 "materials": [
-                    {"mat": "", "pct": 0}
+                    {
+                        "mat": "",
+                        "pct": 0
+                    }
                 ]
             })
+
             st.rerun()
 
 # ============================================================
@@ -1039,31 +1146,44 @@ composition_lines = []
 
 for comp in components_data:
 
-    material_text = build_material_line(comp['materials'])
+    material_text = build_material_line(
+        comp["materials"]
+    )
 
     if use_advanced_mode:
-        line = f"{comp['name']}: {material_text}"
+
+        line = (
+            f'{comp["name"]}: '
+            f'{material_text}'
+        )
+
     else:
+
         line = material_text
 
     composition_lines.append(line)
 
-final_composition_text = " | ".join(composition_lines)
+final_composition_text = " | ".join(
+    composition_lines
+)
 
 # ============================================================
 # Cotton Detection
 # ============================================================
 if len(selected_materials) == 1:
+
     if selected_materials[0].lower() == "cotton":
+
         cotton_value = "Y"
 
 # ============================================================
 # Final Preview
 # ============================================================
 if final_composition_text:
-    st.markdown("### 📋 Final Composition")
-    st.code(final_composition_text)
 
+    st.markdown("### 📋 Final Composition")
+
+    st.code(final_composition_text)
 
 
 
