@@ -1134,7 +1134,9 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         df['product_name'] = format_product_translations(
             product_type, 
             product_row.iloc[0], 
-            material_compositions
+            material_compositions,
+            components_data,  # যোগ করুন
+            comp_translations_df  # যোগ করুন
         )
     else:
         df['product_name'] = ""
