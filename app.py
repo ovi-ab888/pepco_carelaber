@@ -1056,20 +1056,15 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     # Format product translations with AL/MK compositions
     # Format product translations with AL/MK compositions
     def format_product_translations(product_name, translation_row, material_compositions=None):
-        """Build multilingual product description with correct language order"""
-        
-        # সঠিক ভাষার অর্ডার (LV এর পর MK)
         language_order = [
-            'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 
-            'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK', 
-            'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA'
+            'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 
+            'IT', 'LT', 'LV', 'MK', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA'
         ]
         
         result = {}
         for lang in language_order:
             base_text = translation_row.get(lang, product_name)
             
-            # শুধু AL এবং MK তে কম্পোজিশন যোগ হবে
             if material_compositions and lang in ['AL', 'MK']:
                 comp_text = material_compositions.get(lang, "")
                 if comp_text:
@@ -1077,12 +1072,13 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             
             result[lang] = base_text
         
-        # EN প্রথমে বসবে
         formatted = [f"|EN| {translation_row.get('EN', product_name)}"]
         
-        # বাকি ভাষাগুলো অর্ডার অনুযায়ী যোগ হবে
         for lang in language_order:
             formatted.append(f"|{lang}| {result.get(lang, '')}")
+            # ES এর পর slash যোগ করুন (যদি চান)
+            if lang == 'ES':
+                formatted.append("/")
         
         return " ".join(formatted)
     
