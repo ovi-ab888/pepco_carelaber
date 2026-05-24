@@ -962,7 +962,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         
         composition_lines.append(line)
     
-    final_composition_text = " | ".join(composition_lines)
+    final_composition_text = "\n\n".join(composition_lines)
     
     # Build material compositions for AL/MK
     if selected_materials and not material_translations_df.empty:
