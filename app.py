@@ -796,9 +796,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
 # Updated MATERIAL COMPOSITION UI (Clean Version)
 
-Replace your full section:
 
-```python
 # MATERIAL COMPOSITION UI (With Simple/Advanced Mode)
 ```
 
