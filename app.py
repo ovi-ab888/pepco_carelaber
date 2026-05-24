@@ -935,6 +935,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     cotton_value = ""
     components_data = []
     material_compositions = {}
+    simple_comp_inst = ""  # Initialize for Simple Mode
     
     # ============================================================
     # RENDER BLOCKS
@@ -973,7 +974,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                         st.rerun()
             
             # ----------------------------------------------------
-            # Composition Instructions (Optional)
+            # Composition Instructions (Optional) - Advanced Mode Only
             # ----------------------------------------------------
             if use_advanced_mode:
                 inst_idx = comp_inst_options.index(block.get("comp_inst", "")) if block.get("comp_inst", "") in comp_inst_options else 0
@@ -1085,6 +1086,16 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.info("Maximum 5 components allowed")
     
     # ============================================================
+    # SIMPLE MODE GLOBAL COMPOSITION INSTRUCTIONS
+    # ============================================================
+    if not use_advanced_mode:
+        simple_comp_inst = st.selectbox(
+            "Composition Instructions (Optional)",
+            options=comp_inst_options,
+            key="simple_comp_inst_global"
+        )
+    
+    # ============================================================
     # BUILD FINAL COMPOSITION TEXT (With All Languages)
     # ============================================================
     composition_lines = []
@@ -1104,7 +1115,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         else:
             line = material_text
             # Add global composition instructions for Simple Mode
-            if simple_comp_inst and 'simple_comp_inst' in locals():
+            if simple_comp_inst:
                 inst_text = get_instruction_all_languages(simple_comp_inst)
                 if inst_text:
                     line += f" (Composition Instructions: {inst_text})"
@@ -1150,16 +1161,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     if final_composition_text:
         st.markdown("### 📋 Final Composition (All Languages)")
         st.code(final_composition_text, language="text")
-    
-    # For Simple Mode, store the global composition instruction
-    if not use_advanced_mode:
-        simple_comp_inst = st.selectbox(
-            "Composition Instructions (Optional)",
-            options=comp_inst_options,
-            key="simple_comp_inst_global"
-        )
-    else:
-        simple_comp_inst = ""
 
 
 
