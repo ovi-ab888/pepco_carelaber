@@ -587,82 +587,6 @@ def extract_data_from_pdf(file):
         return None
 
 
-    # ------------------------------------------------------------
-    # Helper Functions for Translations
-    # ------------------------------------------------------------
-    def get_material_all_languages(mat_name, pct):
-        """Get material with percentage in all languages"""
-        if materials_df.empty or not mat_name:
-            return f"{pct}% {mat_name}"
-        
-        en_col = materials_df.columns[0]
-        row = materials_df[materials_df[en_col].astype(str).str.strip() == mat_name]
-        if row.empty:
-            return f"{pct}% {mat_name}"
-        
-        translations = [mat_name]
-        for col in materials_df.columns:
-            val = row.iloc[0].get(col, "")
-            if pd.notna(val) and str(val).strip() and val != mat_name:
-                translations.append(str(val).strip())
-        
-        return f"{pct}% {' / '.join(translations)}"
-    
-    def get_component_name_translations(comp_name):
-        """Get component name in all available languages"""
-        if comp_translations_df.empty:
-            return comp_name
-        
-        row = comp_translations_df[comp_translations_df['EN'].astype(str).str.strip() == comp_name]
-        if row.empty:
-            return comp_name
-        
-        translations = [comp_name]
-        for col in comp_translations_df.columns:
-            if col != 'EN':
-                val = row.iloc[0].get(col, "")
-                if pd.notna(val) and str(val).strip():
-                    translations.append(str(val).strip())
-        
-        return " / ".join(translations)
-    
-    def get_instruction_all_languages(inst_text):
-        """Get composition instruction in all languages"""
-        if not inst_text or comp_instructions_df.empty:
-            return ""
-        
-        en_col = comp_instructions_df.columns[0]
-        row = comp_instructions_df[comp_instructions_df[en_col].astype(str).str.strip() == inst_text]
-        if row.empty:
-            return ""
-        
-        translations = []
-        for col in comp_instructions_df.columns:
-            val = row.iloc[0].get(col, "")
-            if pd.notna(val) and str(val).strip():
-                translations.append(str(val).strip())
-        
-        return " / ".join(translations)
-    
-    def get_care_instruction_all_languages(inst_text, care_instructions_df):
-        """Get care instruction in all languages"""
-        if not inst_text or care_instructions_df.empty:
-            return ""
-        
-        en_col = care_instructions_df.columns[0]
-        row = care_instructions_df[care_instructions_df[en_col].astype(str).str.strip() == inst_text]
-        if row.empty:
-            return ""
-        
-        translations = []
-        for col in care_instructions_df.columns:
-            val = row.iloc[0].get(col, "")
-            if pd.notna(val) and str(val).strip():
-                translations.append(str(val).strip())
-        
-        return " / ".join(translations)
-
-
 # ================================================================
 # PART 4 — MAIN PROCESSOR
 # ================================================================
@@ -741,21 +665,13 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.error("Please enter a valid number like 12.50 or 12,50")
             pln_price = None
 
-
-
-
-
-
     # ============================================================
     # MATERIAL COMPOSITION UI (Clean Simple + Advanced Version)
     # ============================================================
     st.markdown("### 🧵 Material Composition (%)")
     
-    care_data = load_care_composition_data()
-    
     materials_df = care_data.get("materials", pd.DataFrame())
     comp_instructions_df = care_data.get("comp_instructions", pd.DataFrame())
-    comp_translations_df = load_component_translations()
     
     # ------------------------------------------------------------
     # Helper Functions for Translations
@@ -797,7 +713,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         return " / ".join(translations)
     
     def get_instruction_all_languages(inst_text):
-        """Get instruction in all languages"""
+        """Get composition instruction in all languages"""
         if not inst_text or comp_instructions_df.empty:
             return ""
         
@@ -808,6 +724,24 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         
         translations = []
         for col in comp_instructions_df.columns:
+            val = row.iloc[0].get(col, "")
+            if pd.notna(val) and str(val).strip():
+                translations.append(str(val).strip())
+        
+        return " / ".join(translations)
+    
+    def get_care_instruction_all_languages(inst_text, care_instructions_df):
+        """Get care instruction in all languages"""
+        if not inst_text or care_instructions_df.empty:
+            return ""
+        
+        en_col = care_instructions_df.columns[0]
+        row = care_instructions_df[care_instructions_df[en_col].astype(str).str.strip() == inst_text]
+        if row.empty:
+            return ""
+        
+        translations = []
+        for col in care_instructions_df.columns:
             val = row.iloc[0].get(col, "")
             if pd.notna(val) and str(val).strip():
                 translations.append(str(val).strip())
@@ -852,7 +786,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     if "composition_blocks" not in st.session_state:
         st.session_state.composition_blocks = []
     
-    # Initialize Default Block if empty
     if not st.session_state.composition_blocks:
         st.session_state.composition_blocks.append({
             "component_name": "Main fabric",
@@ -860,9 +793,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             "materials": [{"mat": "", "pct": 0}]
         })
     
-    # ------------------------------------------------------------
-    # Helper Function to Build Material Line
-    # ------------------------------------------------------------
     def build_material_line(materials, use_translation=True):
         parts = []
         for m in materials:
@@ -874,28 +804,21 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 parts.append(mat_text)
         return ", ".join(parts)
     
-    # ------------------------------------------------------------
-    # Output Variables
-    # ------------------------------------------------------------
+    # Output variables
     final_composition_text = ""
     selected_materials = []
     cotton_value = ""
     components_data = []
     material_compositions = {}
-    simple_comp_inst = ""  # Initialize for Simple Mode
+    simple_comp_inst = ""
     
-    # ============================================================
-    # RENDER BLOCKS
-    # ============================================================
+    # Render blocks
     for block_idx, block in enumerate(st.session_state.composition_blocks):
         
         with st.container(border=True):
             
             top1, top2 = st.columns([5, 1])
             
-            # ----------------------------------------------------
-            # Component Name
-            # ----------------------------------------------------
             with top1:
                 if use_advanced_mode:
                     current_name = block.get("component_name", "Main fabric")
@@ -909,9 +832,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 else:
                     st.markdown("#### Simple Composition")
             
-            # ----------------------------------------------------
-            # Remove Component Button
-            # ----------------------------------------------------
             with top2:
                 if len(st.session_state.composition_blocks) > 1:
                     st.write("")
@@ -920,9 +840,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                         st.session_state.composition_blocks.pop(block_idx)
                         st.rerun()
             
-            # ----------------------------------------------------
-            # Composition Instructions (Optional) - Advanced Mode Only
-            # ----------------------------------------------------
             if use_advanced_mode:
                 inst_idx = comp_inst_options.index(block.get("comp_inst", "")) if block.get("comp_inst", "") in comp_inst_options else 0
                 block["comp_inst"] = st.selectbox(
@@ -932,9 +849,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                     key=f"comp_inst_{block_idx}"
                 )
             
-            # ----------------------------------------------------
-            # Materials Section
-            # ----------------------------------------------------
             st.markdown("#### Materials")
             
             for mat_idx, mat in enumerate(block["materials"]):
@@ -967,16 +881,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                             block["materials"].pop(mat_idx)
                             st.rerun()
             
-            # ----------------------------------------------------
-            # Add Material Button
-            # ----------------------------------------------------
             if st.button("➕ Add Material", key=f"add_material_{block_idx}"):
                 block["materials"].append({"mat": "", "pct": 0})
                 st.rerun()
             
-            # ----------------------------------------------------
-            # Validation
-            # ----------------------------------------------------
             valid_materials = [m for m in block["materials"] if m["mat"] and m["pct"] > 0]
             total_pct = sum(m["pct"] for m in valid_materials)
             
@@ -989,9 +897,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             else:
                 st.info("📌 Enter material composition")
             
-            # ----------------------------------------------------
-            # Preview with Translations
-            # ----------------------------------------------------
             if valid_materials and total_pct == 100:
                 preview_text = build_material_line(valid_materials, use_translation=True)
                 
@@ -1003,9 +908,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 
                 st.code(full_preview, language="text")
             
-            # ----------------------------------------------------
-            # Save Component Data for Final Composition
-            # ----------------------------------------------------
             if valid_materials and total_pct == 100:
                 components_data.append({
                     "name": block["component_name"],
@@ -1017,9 +919,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                     if m["mat"] not in selected_materials:
                         selected_materials.append(m["mat"])
     
-    # ============================================================
-    # ADD COMPONENT BUTTON (Advanced Mode Only)
-    # ============================================================
     if use_advanced_mode:
         if len(st.session_state.composition_blocks) < 5:
             if st.button("➕ Add Component", key="add_component_btn"):
@@ -1032,9 +931,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         else:
             st.info("Maximum 5 components allowed")
     
-    # ============================================================
-    # SIMPLE MODE GLOBAL COMPOSITION INSTRUCTIONS
-    # ============================================================
     if not use_advanced_mode:
         simple_comp_inst = st.selectbox(
             "Composition Instructions (Optional)",
@@ -1042,9 +938,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             key="simple_comp_inst_global"
         )
     
-    # ============================================================
-    # BUILD FINAL COMPOSITION TEXT (With All Languages)
-    # ============================================================
+    # Build final composition text
     composition_lines = []
     
     for comp in components_data:
@@ -1054,14 +948,12 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             comp_translated = get_component_name_translations(comp["name"])
             line = f"{comp_translated}: {material_text}"
             
-            # Add composition instructions if present
             if comp.get("comp_inst"):
                 inst_text = get_instruction_all_languages(comp["comp_inst"])
                 if inst_text:
                     line += f" (Composition Instructions: {inst_text})"
         else:
             line = material_text
-            # Add global composition instructions for Simple Mode
             if simple_comp_inst:
                 inst_text = get_instruction_all_languages(simple_comp_inst)
                 if inst_text:
@@ -1071,9 +963,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     
     final_composition_text = " | ".join(composition_lines)
     
-    # ============================================================
-    # BUILD MATERIAL COMPOSITIONS FOR AL/MK (product_name)
-    # ============================================================
+    # Build material compositions for AL/MK
     if selected_materials and not material_translations_df.empty:
         for lang in ['AL', 'MK']:
             comp_parts = []
@@ -1088,11 +978,8 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             if comp_parts:
                 material_compositions[lang] = ", ".join(comp_parts)
     
-    # ============================================================
-    # COTTON DETECTION
-    # ============================================================
+    # Cotton detection
     if len(selected_materials) == 1 and selected_materials[0].lower() == "cotton":
-        # Check if all components have 100% cotton
         all_cotton = True
         for comp in components_data:
             comp_total = sum(m["pct"] for m in comp["materials"])
@@ -1102,18 +989,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         if all_cotton:
             cotton_value = "Y"
     
-    # ============================================================
-    # FINAL PREVIEW
-    # ============================================================
     if final_composition_text:
         st.markdown("### 📋 Final Composition (All Languages)")
         st.code(final_composition_text, language="text")
-
-
-
-
-
-
+    
     # ============================================================
     # CARE INSTRUCTIONS UI
     # ============================================================
@@ -1150,10 +1029,8 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             elif new_care_inst in st.session_state.care_inst_list:
                 st.warning("This instruction already added!")
     
-    # Get translated text for each selected instruction - using correct function
     all_care_inst_translated = []
     for selected_care_inst in st.session_state.care_inst_list:
-        # Use the new function for care instructions
         inst_text = get_care_instruction_all_languages(selected_care_inst, care_instructions_df)
         if inst_text:
             all_care_inst_translated.append(inst_text)
@@ -1163,7 +1040,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     if care_inst_translated:
         with st.expander("📋 Preview Care Instructions (All Languages)"):
             st.write(care_inst_translated)
-            
+    
     # ============================================================
     # DataFrame enrichment
     # ============================================================
@@ -1175,20 +1052,44 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     
     df['Collection'] = df.apply(lambda r: modify_collection(r['Collection'], r['Item_classification']), axis=1)
     
+    # Format product translations with AL/MK compositions
+    def format_product_translations(product_name, translation_row, material_compositions=None):
+        language_order = ['AL', 'MK']
+        
+        result = {}
+        for lang in language_order:
+            base_text = translation_row.get(lang, product_name)
+            
+            if material_compositions and lang in material_compositions:
+                comp_text = material_compositions.get(lang, "")
+                if comp_text:
+                    base_text = f"{base_text}: {comp_text}"
+            
+            result[lang] = base_text
+        
+        formatted = [f"|EN| {translation_row.get('EN', product_name)}"]
+        for lang in language_order:
+            formatted.append(f"|{lang}| {result.get(lang, '')}")
+        
+        other_langs = ['BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA']
+        for lang in other_langs:
+            text = translation_row.get(lang, product_name)
+            formatted.append(f"|{lang}| {text}")
+        
+        return " ".join(formatted)
+    
     product_row = filtered[filtered['PRODUCT_NAME'] == product_type]
     if not product_row.empty:
         df['product_name'] = format_product_translations(
             product_type, 
             product_row.iloc[0], 
-            components_data,
-            comp_translations_df,
             material_compositions
         )
     else:
         df['product_name'] = ""
     
     df['washing_code'] = WASHING_CODES[washing_code_key]
-
+    
     # ============================================================
     # PRICE LADDER + CSV EXPORT
     # ============================================================
@@ -1215,8 +1116,8 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 if col not in df.columns:
                     df[col] = ""
             
-            st.success("Done!")
-            st.subheader("Edit Before Download")
+            st.success("✅ Done! Product data processed successfully.")
+            st.subheader("✏️ Edit Before Download")
             edited_df = st.data_editor(df[final_cols])
             
             csv_buffer = StringIO()
@@ -1233,45 +1134,65 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             style_val = first_row_df.get("Style", "UNKNOWN")
             custom_filename = f"PEPCO_{season_val}_{sku_val}_Swingtag {supplier_code}_00_{style_val}.csv"
             
-            st.download_button("Download CSV", csv_buffer.getvalue().encode('utf-8-sig'), file_name=custom_filename, mime="text/csv")
+            st.download_button(
+                "📥 Download CSV",
+                csv_buffer.getvalue().encode('utf-8-sig'),
+                file_name=custom_filename,
+                mime="text/csv"
+            )
         else:
-            st.warning("Processing stopped - valid PLN price not found")
+            st.warning("⚠️ Processing stopped - valid PLN price not found")
 
 
 # ================================================================
 #  PEPCO SECTION (Uploader + Reset)
 # ================================================================
 def pepco_section():
-    st.subheader("PEPCO Data Processing")
+    st.subheader("📄 PEPCO Data Processing")
+    
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = 0
+    
     cols = st.columns([1, 6])
     with cols[0]:
         def _reset_all():
             for k in list(st.session_state.keys()):
-                if k.startswith(("ui_", "mat_", "pepco_", "comp_", "care_", "colour_", "simple_")):
+                if k.startswith(("ui_", "mat_", "pepco_", "comp_", "care_", "colour_", "simple_", "composition_")):
                     st.session_state.pop(k, None)
             st.session_state.uploader_key += 1
-        st.button("Upload New File", on_click=_reset_all)
-    uploaded_pdfs = st.file_uploader("Upload PEPCO Data file", type=["pdf"], key=f"pepco_uploader_{st.session_state.uploader_key}", accept_multiple_files=True)
+        
+        st.button("🆕 Upload New File", on_click=_reset_all)
+    
+    uploaded_pdfs = st.file_uploader(
+        "Upload PEPCO Data file (PDF)",
+        type=["pdf"],
+        key=f"pepco_uploader_{st.session_state.uploader_key}",
+        accept_multiple_files=True
+    )
+    
     if uploaded_pdfs:
         if not isinstance(uploaded_pdfs, list):
             uploaded_pdfs = [uploaded_pdfs]
+        
         primary_pdf = uploaded_pdfs[0]
         others = uploaded_pdfs[1:]
+        
         other_ids = []
         for f in others:
             try:
                 f.seek(0)
             except Exception:
                 pass
+            
             oid = extract_order_id_only(f)
             if oid:
                 other_ids.append(oid)
+            
             try:
                 f.seek(0)
             except Exception:
                 pass
+        
         concatenated_ids = "+".join(other_ids) if other_ids else ""
         process_pepco_pdf(primary_pdf, extra_order_ids=concatenated_ids)
 
@@ -1283,11 +1204,11 @@ def render_header():
     left, _ = st.columns([3, 10], vertical_alignment="center")
     with left:
         if os.path.exists(LOGO_SVG):
-            st.image(LOGO_SVG, width=300)
+            st.image(LOGO_SVG, width=250)
         elif os.path.exists(LOGO_PNG):
-            st.image(LOGO_PNG, width=300)
+            st.image(LOGO_PNG, width=250)
         else:
-            st.markdown("<div style='font-size:40px'>🏷️</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:40px'>🧾</div>", unsafe_allow_html=True)
 
 
 # ================================================================
@@ -1297,9 +1218,12 @@ def main():
     st.markdown(THEME_CSS, unsafe_allow_html=True)
     render_header()
     st.title("PEPCO Automation App")
+    
     if not check_password():
         st.stop()
+    
     pepco_section()
+    
     st.markdown("---")
     st.caption("This app developed by Ovi")
 
