@@ -802,7 +802,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 else:
                     mat_text = f"{m['pct']}% {m['mat']}"
                 parts.append(mat_text)
-        return ", ".join(parts)
+        return "\n\n".join(parts)
     
     # Output variables
     final_composition_text = ""
