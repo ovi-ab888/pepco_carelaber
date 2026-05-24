@@ -1063,9 +1063,9 @@ if len(selected_materials) == 1:
 if final_composition_text:
     st.markdown("### 📋 Final Composition")
     st.code(final_composition_text)
-```
 
----
+
+
 
 # ✅ What Improved
 
@@ -1079,24 +1079,6 @@ if final_composition_text:
 * Easier future upgrade
 * Less session_state complexity
 
----
-
-# ✅ Output Example
-
-## Simple Mode
-
-```text
-90% Cotton, 10% Elastane
-```
-
----
-
-## Advanced Mode
-
-```text
-Main fabric: 90% Cotton, 10% Elastane |
-Lining: 100% Polyester
-```
 
 
     # ============================================================
