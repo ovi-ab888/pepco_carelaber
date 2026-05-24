@@ -1203,17 +1203,20 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             elif new_care_inst in st.session_state.care_inst_list:
                 st.warning("This instruction already added!")
     
+    # Get translated text for each selected instruction
     all_care_inst_translated = []
     for selected_care_inst in st.session_state.care_inst_list:
-        inst_text = get_instruction_all_languages(selected_care_inst, care_instructions_df)
+        # Call with single argument
+        inst_text = get_instruction_all_languages(selected_care_inst)
         if inst_text:
             all_care_inst_translated.append(inst_text)
+    
     care_inst_translated = ", ".join(all_care_inst_translated) if all_care_inst_translated else ""
     
     if care_inst_translated:
-        with st.expander("Preview Care Instructions (All Languages)"):
+        with st.expander("📋 Preview Care Instructions (All Languages)"):
             st.write(care_inst_translated)
-
+            
     # ============================================================
     # DataFrame enrichment
     # ============================================================
