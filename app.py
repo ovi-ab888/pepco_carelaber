@@ -1054,31 +1054,78 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     df['Collection'] = df.apply(lambda r: modify_collection(r['Collection'], r['Item_classification']), axis=1)
     
     # Format product translations with AL/MK compositions
-    # Format product translations with AL/MK compositions
-    def format_product_translations(product_name, translation_row, material_compositions=None):
+    def format_product_translations(product_name, translation_row, material_compositions=None, components_data=None, comp_translations_df=None):
+        """Build multilingual product description with component names in AL/MK"""
+        
+        # সঠিক ভাষার অর্ডার
         language_order = [
             'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 
             'IT', 'LT', 'LV', 'MK', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA'
         ]
         
+        # Country suffixes
+        country_suffixes = {
+            'BiH': " Sastav materijala na ušivenoj etiketi.",
+            'RS': " Sastav materijala nalazi se na ušivenoj etiketi.",
+        }
+        
         result = {}
+        
         for lang in language_order:
             base_text = translation_row.get(lang, product_name)
             
-            if material_compositions and lang in ['AL', 'MK']:
-                comp_text = material_compositions.get(lang, "")
-                if comp_text:
-                    base_text = f"{base_text}: {comp_text}"
+            # AL এবং MK এর জন্য কম্পোনেন্ট সহ কম্পোজিশন যোগ করুন
+            if lang in ['AL', 'MK'] and components_data and comp_translations_df is not None:
+                comp_parts = []
+                for comp in components_data:
+                    # কম্পোনেন্টের নাম ট্রান্সলেট করুন
+                    comp_name = comp.get("name", "")
+                    comp_translated = comp_name
+                    if not comp_translations_df.empty:
+                        row = comp_translations_df[comp_translations_df['EN'].astype(str).str.strip() == comp_name]
+                        if not row.empty:
+                            comp_translated = row.iloc[0].get(lang, comp_name)
+                    
+                    # ম্যাটেরিয়াল কম্পোজিশন
+                    materials_parts = []
+                    for mat in comp.get("materials", []):
+                        if mat.get("mat") and mat.get("pct", 0) > 0:
+                            # ম্যাটেরিয়াল ট্রান্সলেশন
+                            mat_translated = mat["mat"]
+                            t = material_translations_df[
+                                (material_translations_df['material'] == mat['mat']) & 
+                                (material_translations_df['language'] == lang)
+                            ]
+                            if not t.empty:
+                                mat_translated = t['translation'].iloc[0]
+                            materials_parts.append(f"{mat['pct']}% {mat_translated}")
+                    
+                    materials_text = ", ".join(materials_parts)
+                    comp_parts.append(f"{comp_translated} {materials_text}")
+                
+                if comp_parts:
+                    base_text = f"{base_text}: {', '.join(comp_parts)}"
+            
+            # ES এর জন্য / দিয়ে Catalan যোগ করুন
+            elif lang == 'ES':
+                es_ca_text = translation_row.get('ES_CA', "")
+                if es_ca_text and pd.notna(es_ca_text):
+                    base_text = f"{base_text} / {es_ca_text}"
+            
+            # Country suffixes যোগ করুন
+            if lang in country_suffixes:
+                if not base_text.endswith('.'):
+                    base_text += "."
+                base_text += country_suffixes[lang]
             
             result[lang] = base_text
         
+        # EN প্রথমে বসবে
         formatted = [f"|EN| {translation_row.get('EN', product_name)}"]
         
+        # বাকি ভাষাগুলো অর্ডার অনুযায়ী যোগ হবে
         for lang in language_order:
             formatted.append(f"|{lang}| {result.get(lang, '')}")
-            # ES এর পর slash যোগ করুন (যদি চান)
-            if lang == 'ES':
-                formatted.append("/")
         
         return " ".join(formatted)
     
