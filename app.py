@@ -1036,7 +1036,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         if inst_text:
             all_care_inst_translated.append(inst_text)
     
-    care_inst_translated = ", ".join(all_care_inst_translated) if all_care_inst_translated else ""
+    care_inst_translated = "\n\n".join(all_care_inst_translated) if all_care_inst_translated else ""
     
     if care_inst_translated:
         with st.expander("📋 Preview Care Instructions (All Languages)"):
