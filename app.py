@@ -587,133 +587,80 @@ def extract_data_from_pdf(file):
         return None
 
 
-# ================================================================
-#  TRANSLATION FORMATTER FUNCTIONS
-# ================================================================
-
-def get_component_name_translations(comp_name, comp_translations_df):
-    """Get component name in all available languages"""
-    if comp_translations_df.empty:
-        return comp_name
+    # ------------------------------------------------------------
+    # Helper Functions for Translations
+    # ------------------------------------------------------------
+    def get_material_all_languages(mat_name, pct):
+        """Get material with percentage in all languages"""
+        if materials_df.empty or not mat_name:
+            return f"{pct}% {mat_name}"
+        
+        en_col = materials_df.columns[0]
+        row = materials_df[materials_df[en_col].astype(str).str.strip() == mat_name]
+        if row.empty:
+            return f"{pct}% {mat_name}"
+        
+        translations = [mat_name]
+        for col in materials_df.columns:
+            val = row.iloc[0].get(col, "")
+            if pd.notna(val) and str(val).strip() and val != mat_name:
+                translations.append(str(val).strip())
+        
+        return f"{pct}% {' / '.join(translations)}"
     
-    row = comp_translations_df[comp_translations_df['EN'].astype(str).str.strip() == comp_name]
-    if row.empty:
-        return comp_name
+    def get_component_name_translations(comp_name):
+        """Get component name in all available languages"""
+        if comp_translations_df.empty:
+            return comp_name
+        
+        row = comp_translations_df[comp_translations_df['EN'].astype(str).str.strip() == comp_name]
+        if row.empty:
+            return comp_name
+        
+        translations = [comp_name]
+        for col in comp_translations_df.columns:
+            if col != 'EN':
+                val = row.iloc[0].get(col, "")
+                if pd.notna(val) and str(val).strip():
+                    translations.append(str(val).strip())
+        
+        return " / ".join(translations)
     
-    translations = [comp_name]
-    for col in comp_translations_df.columns:
-        if col != 'EN':
+    def get_instruction_all_languages(inst_text):
+        """Get composition instruction in all languages"""
+        if not inst_text or comp_instructions_df.empty:
+            return ""
+        
+        en_col = comp_instructions_df.columns[0]
+        row = comp_instructions_df[comp_instructions_df[en_col].astype(str).str.strip() == inst_text]
+        if row.empty:
+            return ""
+        
+        translations = []
+        for col in comp_instructions_df.columns:
             val = row.iloc[0].get(col, "")
             if pd.notna(val) and str(val).strip():
                 translations.append(str(val).strip())
-    
-    return " / ".join(translations)
-
-
-def get_material_all_languages(mat_name, pct, materials_df):
-    """Get material with percentage in all languages"""
-    if materials_df.empty or not mat_name:
-        return f"{pct}% {mat_name}"
-    
-    en_col = materials_df.columns[0]
-    row = materials_df[materials_df[en_col].astype(str).str.strip() == mat_name]
-    if row.empty:
-        return f"{pct}% {mat_name}"
-    
-    translations = [mat_name]
-    for col in materials_df.columns:
-        val = row.iloc[0].get(col, "")
-        if pd.notna(val) and str(val).strip() and val != mat_name:
-            translations.append(str(val).strip())
-    
-    return f"{pct}% {' / '.join(translations)}"
-
-
-def get_instruction_all_languages(inst_text, comp_instructions_df):
-    """Get instruction in all languages"""
-    if not inst_text or comp_instructions_df.empty:
-        return ""
-    
-    en_col = comp_instructions_df.columns[0]
-    row = comp_instructions_df[comp_instructions_df[en_col].astype(str).str.strip() == inst_text]
-    if row.empty:
-        return ""
-    
-    translations = []
-    for col in comp_instructions_df.columns:
-        val = row.iloc[0].get(col, "")
-        if pd.notna(val) and str(val).strip():
-            translations.append(str(val).strip())
-    
-    return " / ".join(translations)
-
-
-def format_product_translations(product_name, translation_row, components_data, comp_translations_df, material_compositions=None):
-    """Builds multilingual product description with component information."""
-    language_order = ['AL', 'MK']
-    
-    result = {}
-    for lang in language_order:
-        base_text = translation_row.get(lang, product_name)
         
-        # Add composition for AL and MK
-        if material_compositions and lang in material_compositions:
-            comp_text = material_compositions.get(lang, "")
-            if comp_text:
-                base_text = f"{base_text}: {comp_text}"
+        return " / ".join(translations)
+    
+    def get_care_instruction_all_languages(inst_text, care_instructions_df):
+        """Get care instruction in all languages"""
+        if not inst_text or care_instructions_df.empty:
+            return ""
         
-        result[lang] = base_text
-    
-    # Build final formatted string
-    formatted = [f"|EN| {translation_row.get('EN', product_name)}"]
-    for lang in language_order:
-        formatted.append(f"|{lang}| {result.get(lang, '')}")
-    
-    # Add other languages without component info
-    other_langs = ['BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA']
-    for lang in other_langs:
-        text = translation_row.get(lang, product_name)
-        formatted.append(f"|{lang}| {text}")
-    
-    return " ".join(formatted)
-
-
-def build_composition_text_simple(materials, materials_df, comp_instructions_df, comp_inst_text=""):
-    """Build composition text for Simple Mode (no component name)"""
-    materials_parts = []
-    for mat in materials:
-        if mat["mat"] not in (None, "", "—") and mat["pct"] > 0:
-            mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
-            materials_parts.append(mat_text)
-    
-    final_text = ", ".join(materials_parts)
-    
-    if comp_inst_text:
-        inst_text = get_instruction_all_languages(comp_inst_text, comp_instructions_df)
-        if inst_text:
-            final_text += f" (Composition Instructions: {inst_text})"
-    
-    return final_text
-
-
-def build_composition_text_advanced(components_data, materials_df, comp_translations_df):
-    """Build composition text for Advanced Mode (with component names)"""
-    composition_parts = []
-    for comp in components_data:
-        comp_name = comp.get("name", "")
-        materials = comp.get("materials", [])
+        en_col = care_instructions_df.columns[0]
+        row = care_instructions_df[care_instructions_df[en_col].astype(str).str.strip() == inst_text]
+        if row.empty:
+            return ""
         
-        comp_name_translated = get_component_name_translations(comp_name, comp_translations_df)
+        translations = []
+        for col in care_instructions_df.columns:
+            val = row.iloc[0].get(col, "")
+            if pd.notna(val) and str(val).strip():
+                translations.append(str(val).strip())
         
-        materials_parts = []
-        for mat in materials:
-            mat_text = get_material_all_languages(mat["mat"], mat["pct"], materials_df)
-            materials_parts.append(mat_text)
-        
-        materials_text = ", ".join(materials_parts)
-        composition_parts.append(f"{comp_name_translated}: {materials_text}")
-    
-    return " | ".join(composition_parts)
+        return " / ".join(translations)
 
 
 # ================================================================
@@ -1203,11 +1150,11 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             elif new_care_inst in st.session_state.care_inst_list:
                 st.warning("This instruction already added!")
     
-    # Get translated text for each selected instruction
+    # Get translated text for each selected instruction - using correct function
     all_care_inst_translated = []
     for selected_care_inst in st.session_state.care_inst_list:
-        # Call with single argument
-        inst_text = get_instruction_all_languages(selected_care_inst)
+        # Use the new function for care instructions
+        inst_text = get_care_instruction_all_languages(selected_care_inst, care_instructions_df)
         if inst_text:
             all_care_inst_translated.append(inst_text)
     
