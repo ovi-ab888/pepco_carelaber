@@ -1074,37 +1074,46 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         for lang in language_order:
             base_text = translation_row.get(lang, product_name)
             
-            # AL এবং MK এর জন্য কম্পোনেন্ট সহ কম্পোজিশন যোগ করুন
-            if lang in ['AL', 'MK'] and components_data and comp_translations_df is not None:
-                comp_parts = []
-                for comp in components_data:
-                    # কম্পোনেন্টের নাম ট্রান্সলেট করুন
-                    comp_name = comp.get("name", "")
-                    comp_translated = comp_name
-                    if not comp_translations_df.empty:
-                        row = comp_translations_df[comp_translations_df['EN'].astype(str).str.strip() == comp_name]
-                        if not row.empty:
-                            comp_translated = row.iloc[0].get(lang, comp_name)
+            # AL এবং MK এর জন্য কম্পোজিশন যোগ করুন
+            if lang in ['AL', 'MK']:
+                if use_advanced_mode and components_data and comp_translations_df is not None:
+                    # ADVANCED MODE: কম্পোনেন্টের নাম + কম্পোজিশন
+                    comp_parts = []
+                    for comp in components_data:
+                        # কম্পোনেন্টের নাম ট্রান্সলেট করুন
+                        comp_name = comp.get("name", "")
+                        comp_translated = comp_name
+                        if not comp_translations_df.empty:
+                            row = comp_translations_df[comp_translations_df['EN'].astype(str).str.strip() == comp_name]
+                            if not row.empty:
+                                comp_translated = row.iloc[0].get(lang, comp_name)
+                        
+                        # ম্যাটেরিয়াল কম্পোজিশন
+                        materials_parts = []
+                        for mat in comp.get("materials", []):
+                            if mat.get("mat") and mat.get("pct", 0) > 0:
+                                # ম্যাটেরিয়াল ট্রান্সলেশন
+                                mat_translated = mat["mat"]
+                                if material_compositions is None:
+                                    # Fallback: use material_translations_df
+                                    t = material_translations_df[
+                                        (material_translations_df['material'] == mat['mat']) & 
+                                        (material_translations_df['language'] == lang)
+                                    ]
+                                    if not t.empty:
+                                        mat_translated = t['translation'].iloc[0]
+                                materials_parts.append(f"{mat['pct']}% {mat_translated}")
+                        
+                        materials_text = ", ".join(materials_parts)
+                        comp_parts.append(f"{comp_translated} {materials_text}")
                     
-                    # ম্যাটেরিয়াল কম্পোজিশন
-                    materials_parts = []
-                    for mat in comp.get("materials", []):
-                        if mat.get("mat") and mat.get("pct", 0) > 0:
-                            # ম্যাটেরিয়াল ট্রান্সলেশন
-                            mat_translated = mat["mat"]
-                            t = material_translations_df[
-                                (material_translations_df['material'] == mat['mat']) & 
-                                (material_translations_df['language'] == lang)
-                            ]
-                            if not t.empty:
-                                mat_translated = t['translation'].iloc[0]
-                            materials_parts.append(f"{mat['pct']}% {mat_translated}")
-                    
-                    materials_text = ", ".join(materials_parts)
-                    comp_parts.append(f"{comp_translated} {materials_text}")
-                
-                if comp_parts:
-                    base_text = f"{base_text}: {', '.join(comp_parts)}"
+                    if comp_parts:
+                        base_text = f"{base_text}: {', '.join(comp_parts)}"
+                elif material_compositions and lang in material_compositions:
+                    # SIMPLE MODE: শুধু ম্যাটেরিয়াল (কম্পোনেন্টের নাম ছাড়া)
+                    comp_text = material_compositions.get(lang, "")
+                    if comp_text:
+                        base_text = f"{base_text}: {comp_text}"
             
             # ES এর জন্য / দিয়ে Catalan যোগ করুন
             elif lang == 'ES':
