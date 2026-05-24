@@ -947,21 +947,23 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         
         if use_advanced_mode:
             comp_translated = get_component_name_translations(comp["name"])
+            # এখানে পরিবর্তন: ":" এর পর "\n\n" যোগ করুন
             line = f"{comp_translated}:\n\n{material_text}"
             
             if comp.get("comp_inst"):
                 inst_text = get_instruction_all_languages(comp["comp_inst"])
                 if inst_text:
-                    line += f" (Composition Instructions: {inst_text})"
+                    line += f"\n\n(Composition Instructions: {inst_text})"
         else:
             line = material_text
             if simple_comp_inst:
                 inst_text = get_instruction_all_languages(simple_comp_inst)
                 if inst_text:
-                    line += f" (Composition Instructions: {inst_text})"
+                    line += f"\n\n(Composition Instructions: {inst_text})"
         
         composition_lines.append(line)
     
+    # কম্পোনেন্টগুলোর মধ্যে ২ লাইন গ্যাপ
     final_composition_text = "\n\n".join(composition_lines)
     
     # Build material compositions for AL/MK
