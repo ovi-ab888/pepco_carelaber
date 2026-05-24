@@ -909,6 +909,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 st.code(full_preview, language="text")
             
             if valid_materials and total_pct == 100:
+                st.write(f"Debug - Adding component: {block['component_name']} with {len(valid_materials)} materials")  # ডিবাগ
                 components_data.append({
                     "name": block["component_name"],
                     "comp_inst": block.get("comp_inst", "") if use_advanced_mode else "",
@@ -1053,28 +1054,35 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     df['Collection'] = df.apply(lambda r: modify_collection(r['Collection'], r['Item_classification']), axis=1)
     
     # Format product translations with AL/MK compositions
+    # Format product translations with AL/MK compositions
     def format_product_translations(product_name, translation_row, material_compositions=None):
-        language_order = ['AL', 'MK']
+        """Build multilingual product description with correct language order"""
+        
+        # সঠিক ভাষার অর্ডার (LV এর পর MK)
+        language_order = [
+            'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 
+            'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK', 
+            'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA'
+        ]
         
         result = {}
         for lang in language_order:
             base_text = translation_row.get(lang, product_name)
             
-            if material_compositions and lang in material_compositions:
+            # শুধু AL এবং MK তে কম্পোজিশন যোগ হবে
+            if material_compositions and lang in ['AL', 'MK']:
                 comp_text = material_compositions.get(lang, "")
                 if comp_text:
                     base_text = f"{base_text}: {comp_text}"
             
             result[lang] = base_text
         
+        # EN প্রথমে বসবে
         formatted = [f"|EN| {translation_row.get('EN', product_name)}"]
+        
+        # বাকি ভাষাগুলো অর্ডার অনুযায়ী যোগ হবে
         for lang in language_order:
             formatted.append(f"|{lang}| {result.get(lang, '')}")
-        
-        other_langs = ['BG', 'BiH', 'CZ', 'DE', 'EE', 'ES', 'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'PL', 'PT', 'RO', 'RS', 'SI', 'SK', 'UA']
-        for lang in other_langs:
-            text = translation_row.get(lang, product_name)
-            formatted.append(f"|{lang}| {text}")
         
         return " ".join(formatted)
     
