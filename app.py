@@ -947,7 +947,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         
         if use_advanced_mode:
             comp_translated = get_component_name_translations(comp["name"])
-            line = f"{comp_translated}: {material_text}"
+            line = f"{comp_translated}:\n\n{material_text}"
             
             if comp.get("comp_inst"):
                 inst_text = get_instruction_all_languages(comp["comp_inst"])
