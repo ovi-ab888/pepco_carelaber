@@ -804,6 +804,8 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 # ============================================================
 st.markdown("### 🧵 Material Composition (%)")
 
+care_data = load_care_composition_data()
+
 materials_df = care_data.get("materials", pd.DataFrame())
 comp_translations_df = load_component_translations()
 
