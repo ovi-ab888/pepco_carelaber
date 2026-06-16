@@ -1165,18 +1165,35 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 df[cur] = currency_values.get(cur, "")
             df['PLN'] = format_number(pln_price, 'PLN')
             df["Item_name_English"] = df["Item_name_EN"].apply(clean_item_name_english)
-            df['Composition'] = final_composition_text
-            df['Care_Instructions'] = care_inst_translated
+            
+            # Composition এবং Care Instructions একসাথে
+            combined_care = ""
+            if final_composition_text and care_inst_translated:
+                combined_care = f"{final_composition_text}\n\n{care_inst_translated}"
+            elif final_composition_text:
+                combined_care = final_composition_text
+            elif care_inst_translated:
+                combined_care = care_inst_translated
+            
+            df['Composition_Care'] = combined_care
+            
+            # SKU Name কলাম
+            df['SKU_Name'] = df['Colour_SKU'].apply(lambda x: x)
+            # অথবা শুধু SKU নাম্বার চাইলে:
+            # df['SKU_Name'] = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x))
 
             final_cols = [
                 "Order_ID", "Style", "Colour", "Supplier_product_code", "Item_classification",
                 "Supplier_name", "today_date", "Collection", "Colour_SKU", "Style_Merch_Season",
                 "Batch", "barcode", "washing_code", "EUR", "BGN", "BAM", "PLN", "RON", "CZK",
                 "UAH", "MKD", "RSD", "HUF", "product_name", "Dept", "Item_name_English", "Season",
-                "Composition", "Care_Instructions"
+                "Composition_Care", "SKU_Name"  # নতুন কলাম
             ]
+            
+            # Optionally include Cotton column
             if 'Cotton' in df.columns and 'Cotton' not in final_cols:
                 final_cols.append("Cotton")
+            
             for col in final_cols:
                 if col not in df.columns:
                     df[col] = ""
@@ -1184,6 +1201,8 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.success("✅ Done! Product data processed successfully.")
             st.subheader("✏️ Edit Before Download")
             edited_df = st.data_editor(df[final_cols])
+            
+            # ... rest of the code (CSV export)
             
             csv_buffer = StringIO()
             writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
