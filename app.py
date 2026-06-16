@@ -1178,7 +1178,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             df['Composition_Care'] = combined_care
             
             # SKU Name কলাম
-            df['SKU_Name'] = df['Colour_SKU'].apply(lambda x: x)
+            df['SKU_Name'] = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x))
             # অথবা শুধু SKU নাম্বার চাইলে:
             # df['SKU_Name'] = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x))
 
